@@ -1,0 +1,22 @@
+# Build artifacts
+**/[Bb]in/
+**/[Oo]bj/
+
+# Visual Studio
+.vs/
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Local environment files
+.env
+.env.*
+
+# OS metadata
+Thumbs.db
+.DS_Store
+
+# codex Agent
+AGENTS.md
