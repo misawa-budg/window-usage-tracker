@@ -4,7 +4,11 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Encodings.Web;
 
+string settingsPath = Path.Combine(Environment.CurrentDirectory, "collector.settings.json");
+CollectorSettings settings = CollectorSettingsLoader.Load(settingsPath);
+
 Console.WriteLine("Foreground polling started. Press Ctrl+C to stop.");
+Console.WriteLine($"Polling interval: {settings.PollingIntervalSeconds}s");
 string logDirectoryPath = Path.Combine(Environment.CurrentDirectory, "logs");
 using var eventWriter = new JsonlEventWriter(logDirectoryPath);
 Console.WriteLine($"Logging to: {logDirectoryPath}");
@@ -16,27 +20,26 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
-await ForegroundCollector.RunPollingAsync(TimeSpan.FromSeconds(1), cts.Token, eventWriter);
+await ForegroundCollector.RunPollingAsync(
+    TimeSpan.FromSeconds(settings.PollingIntervalSeconds),
+    cts.Token,
+    eventWriter,
+    settings);
 
 internal static class ForegroundCollector
 {
-    // 学習用の暫定除外リスト。環境に合わせて調整する。
-    private static readonly HashSet<string> ExcludedExeNames = new(StringComparer.OrdinalIgnoreCase)
+    public static async Task RunPollingAsync(
+        TimeSpan interval,
+        CancellationToken cancellationToken,
+        JsonlEventWriter eventWriter,
+        CollectorSettings settings)
     {
-        "dwm.exe",
-        "TextInputHost.exe",
-        "NVIDIA Overlay.exe",
-        "Overwolf.exe",
-        "ArmourySwAgent.exe"
-    };
-
-    public static async Task RunPollingAsync(TimeSpan interval, CancellationToken cancellationToken, JsonlEventWriter eventWriter)
-    {
+        var excludedExeNames = new HashSet<string>(settings.ExcludedExeNames, StringComparer.OrdinalIgnoreCase);
         var intervalsByApp = new Dictionary<string, AppInterval>(StringComparer.OrdinalIgnoreCase);
         while (!cancellationToken.IsCancellationRequested)
         {
             DateTimeOffset observedAtUtc = DateTimeOffset.UtcNow;
-            Dictionary<string, AppSnapshot> currentByApp = CaptureCurrentStates();
+            Dictionary<string, AppSnapshot> currentByApp = CaptureCurrentStates(excludedExeNames);
 
             foreach ((string appKey, AppSnapshot current) in currentByApp)
             {
@@ -126,7 +129,7 @@ internal static class ForegroundCollector
         Console.WriteLine(JsonSerializer.Serialize(appEvent));
     }
 
-    private static Dictionary<string, AppSnapshot> CaptureCurrentStates()
+    private static Dictionary<string, AppSnapshot> CaptureCurrentStates(HashSet<string> excludedExeNames)
     {
         var byApp = new Dictionary<string, AppSnapshot>(StringComparer.OrdinalIgnoreCase);
         var exeNameCache = new Dictionary<uint, string>();
@@ -155,7 +158,7 @@ internal static class ForegroundCollector
             string exeName = GetExeName(pid, exeNameCache);
             string title = GetWindowTitle(hwnd);
             string state = minimized ? "Minimized" : "Open";
-            if (!ShouldTrackWindow(hwnd, exeName, title, minimized))
+            if (!ShouldTrackWindow(hwnd, exeName, title, minimized, excludedExeNames))
             {
                 return true;
             }
@@ -195,9 +198,14 @@ internal static class ForegroundCollector
         return byApp;
     }
 
-    private static bool ShouldTrackWindow(IntPtr hwnd, string exeName, string title, bool minimized)
+    private static bool ShouldTrackWindow(
+        IntPtr hwnd,
+        string exeName,
+        string title,
+        bool minimized,
+        HashSet<string> excludedExeNames)
     {
-        if (ExcludedExeNames.Contains(exeName))
+        if (excludedExeNames.Contains(exeName))
         {
             return false;
         }
@@ -334,6 +342,73 @@ internal readonly record struct AppSnapshot(
     string Title,
     string State);
 
+internal sealed class CollectorSettings
+{
+    public int PollingIntervalSeconds { get; init; } = 1;
+
+    public string[] ExcludedExeNames { get; init; } =
+    [
+        "dwm.exe",
+        "TextInputHost.exe",
+        "NVIDIA Overlay.exe",
+        "Overwolf.exe",
+        "ArmourySwAgent.exe"
+    ];
+}
+
+internal static class CollectorSettingsLoader
+{
+    private static readonly JsonSerializerOptions DeserializeOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true
+    };
+
+    public static CollectorSettings Load(string settingsPath)
+    {
+        if (!File.Exists(settingsPath))
+        {
+            Console.WriteLine($"Settings not found, using defaults: {settingsPath}");
+            return new CollectorSettings();
+        }
+
+        try
+        {
+            string json = File.ReadAllText(settingsPath, Encoding.UTF8);
+            CollectorSettings? parsed = JsonSerializer.Deserialize<CollectorSettings>(json, DeserializeOptions);
+            if (parsed is null)
+            {
+                Console.WriteLine($"Settings file is empty/invalid, using defaults: {settingsPath}");
+                return new CollectorSettings();
+            }
+
+            int interval = parsed.PollingIntervalSeconds <= 0 ? 1 : parsed.PollingIntervalSeconds;
+            string[] excludedExeNames = parsed.ExcludedExeNames
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (excludedExeNames.Length == 0)
+            {
+                excludedExeNames = new CollectorSettings().ExcludedExeNames;
+            }
+
+            return new CollectorSettings
+            {
+                PollingIntervalSeconds = interval,
+                ExcludedExeNames = excludedExeNames
+            };
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to load settings, using defaults: {ex.Message}");
+            return new CollectorSettings();
+        }
+    }
+}
+
 internal sealed class JsonlEventWriter : IDisposable
 {
     private readonly string _directoryPath;
@@ -371,9 +446,24 @@ internal sealed class JsonlEventWriter : IDisposable
         }
 
         _writer?.Dispose();
-        string filePath = Path.Combine(_directoryPath, $"events-{dateKey}.jsonl");
-        var stream = new FileStream(filePath, FileMode.Append, FileAccess.Write, FileShare.Read);
-        _writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+        string primaryPath = Path.Combine(_directoryPath, $"events-{dateKey}.jsonl");
+        string fallbackPath = Path.Combine(_directoryPath, $"events-{dateKey}-{Environment.ProcessId}.jsonl");
+        string targetPath = primaryPath;
+
+        try
+        {
+            var stream = new FileStream(primaryPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+            _writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        }
+        catch (IOException)
+        {
+            var stream = new FileStream(fallbackPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+            _writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            targetPath = fallbackPath;
+            Console.WriteLine($"Log file in use. Fallback to: {targetPath}");
+        }
+
         _activeDateKey = dateKey;
     }
 }

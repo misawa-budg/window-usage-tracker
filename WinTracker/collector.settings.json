@@ -1,0 +1,10 @@
+{
+  "pollingIntervalSeconds": 1,
+  "excludedExeNames": [
+    "dwm.exe",
+    "TextInputHost.exe",
+    "NVIDIA Overlay.exe",
+    "Overwolf.exe",
+    "ArmourySwAgent.exe"
+  ]
+}
