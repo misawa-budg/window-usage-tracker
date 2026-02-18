@@ -615,8 +615,12 @@ internal interface IAppEventWriter : IDisposable
 
 internal sealed class SqliteEventWriter : IAppEventWriter
 {
+    private const int BatchSize = 50;
+
     private readonly SqliteConnection _connection;
     private readonly SqliteCommand _insertCommand;
+    private readonly List<AppEvent> _buffer = [];
+    private bool _disposed;
 
     public SqliteEventWriter(string databasePath)
     {
@@ -668,22 +672,35 @@ internal sealed class SqliteEventWriter : IAppEventWriter
 
     public void Write(AppEvent appEvent)
     {
-        _insertCommand.Parameters["$event_at_utc"].Value = appEvent.StateEndUtc.ToString("O");
-        _insertCommand.Parameters["$state_start_utc"].Value = appEvent.StateStartUtc.ToString("O");
-        _insertCommand.Parameters["$state_end_utc"].Value = appEvent.StateEndUtc.ToString("O");
-        _insertCommand.Parameters["$exe_name"].Value = appEvent.ExeName;
-        _insertCommand.Parameters["$pid"].Value = (long)appEvent.Pid;
-        _insertCommand.Parameters["$hwnd"].Value = appEvent.Hwnd;
-        _insertCommand.Parameters["$title"].Value = appEvent.Title;
-        _insertCommand.Parameters["$state"].Value = appEvent.State;
-        _insertCommand.Parameters["$source"].Value = appEvent.Source;
-        _insertCommand.ExecuteNonQuery();
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(nameof(SqliteEventWriter));
+        }
+
+        _buffer.Add(appEvent);
+        if (_buffer.Count >= BatchSize)
+        {
+            FlushBuffer();
+        }
     }
 
     public void Dispose()
     {
-        _insertCommand.Dispose();
-        _connection.Dispose();
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            FlushBuffer();
+        }
+        finally
+        {
+            _insertCommand.Dispose();
+            _connection.Dispose();
+            _disposed = true;
+        }
     }
 
     private static void InitializeSchema(SqliteConnection connection)
@@ -711,6 +728,40 @@ internal sealed class SqliteEventWriter : IAppEventWriter
             ON app_events(exe_name, event_at_utc);
             """;
         command.ExecuteNonQuery();
+    }
+
+    private void FlushBuffer()
+    {
+        if (_buffer.Count == 0)
+        {
+            return;
+        }
+
+        using var transaction = _connection.BeginTransaction();
+        _insertCommand.Transaction = transaction;
+
+        foreach (AppEvent appEvent in _buffer)
+        {
+            BindParameters(appEvent);
+            _insertCommand.ExecuteNonQuery();
+        }
+
+        transaction.Commit();
+        _insertCommand.Transaction = null;
+        _buffer.Clear();
+    }
+
+    private void BindParameters(AppEvent appEvent)
+    {
+        _insertCommand.Parameters["$event_at_utc"].Value = appEvent.StateEndUtc.ToString("O");
+        _insertCommand.Parameters["$state_start_utc"].Value = appEvent.StateStartUtc.ToString("O");
+        _insertCommand.Parameters["$state_end_utc"].Value = appEvent.StateEndUtc.ToString("O");
+        _insertCommand.Parameters["$exe_name"].Value = appEvent.ExeName;
+        _insertCommand.Parameters["$pid"].Value = (long)appEvent.Pid;
+        _insertCommand.Parameters["$hwnd"].Value = appEvent.Hwnd;
+        _insertCommand.Parameters["$title"].Value = appEvent.Title;
+        _insertCommand.Parameters["$state"].Value = appEvent.State;
+        _insertCommand.Parameters["$source"].Value = appEvent.Source;
     }
 }
 
