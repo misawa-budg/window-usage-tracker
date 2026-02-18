@@ -1,8 +1,8 @@
 # Build artifacts
 **/[Bb]in/
 **/[Oo]bj/
-WinTracker/logs/
-WinTracker/data/
+WinTracker.Collector/logs/
+WinTracker.Collector/data/
 data/
 
 # Visual Studio

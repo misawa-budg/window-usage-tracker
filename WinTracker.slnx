@@ -1,3 +1,5 @@
 <Solution>
-  <Project Path="WinTracker/WinTracker.csproj" />
+  <Project Path="WinTracker.Collector/WinTracker.Collector.csproj" />
+  <Project Path="WinTracker.Shared/WinTracker.Shared.csproj" />
+  <Project Path="WinTracker.Viewer/WinTracker.Viewer.csproj" />
 </Solution>
