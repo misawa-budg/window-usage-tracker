@@ -2,8 +2,13 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Encodings.Web;
 
 Console.WriteLine("Foreground polling started. Press Ctrl+C to stop.");
+string logDirectoryPath = Path.Combine(Environment.CurrentDirectory, "logs");
+using var eventWriter = new JsonlEventWriter(logDirectoryPath);
+Console.WriteLine($"Logging to: {logDirectoryPath}");
+
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
 {
@@ -11,7 +16,7 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
-await ForegroundCollector.RunPollingAsync(TimeSpan.FromSeconds(1), cts.Token);
+await ForegroundCollector.RunPollingAsync(TimeSpan.FromSeconds(1), cts.Token, eventWriter);
 
 internal static class ForegroundCollector
 {
@@ -25,37 +30,61 @@ internal static class ForegroundCollector
         "ArmourySwAgent.exe"
     };
 
-    public static async Task RunPollingAsync(TimeSpan interval, CancellationToken cancellationToken)
+    public static async Task RunPollingAsync(TimeSpan interval, CancellationToken cancellationToken, JsonlEventWriter eventWriter)
     {
-        var lastByApp = new Dictionary<string, AppSnapshot>(StringComparer.OrdinalIgnoreCase);
+        var intervalsByApp = new Dictionary<string, AppInterval>(StringComparer.OrdinalIgnoreCase);
         while (!cancellationToken.IsCancellationRequested)
         {
+            DateTimeOffset observedAtUtc = DateTimeOffset.UtcNow;
             Dictionary<string, AppSnapshot> currentByApp = CaptureCurrentStates();
+
             foreach ((string appKey, AppSnapshot current) in currentByApp)
             {
-                if (!lastByApp.TryGetValue(appKey, out AppSnapshot previous) ||
-                    !string.Equals(previous.State, current.State, StringComparison.Ordinal))
+                if (!intervalsByApp.TryGetValue(appKey, out AppInterval existing))
                 {
-                    var appEvent = new AppEvent(
-                        EventAtUtc: DateTimeOffset.UtcNow,
+                    intervalsByApp[appKey] = new AppInterval(
+                        StateStartUtc: observedAtUtc,
+                        StateEndUtc: observedAtUtc,
                         ExeName: current.ExeName,
                         Pid: current.Pid,
                         Hwnd: current.Hwnd,
                         Title: current.Title,
                         State: current.State);
-
-                    Console.WriteLine(JsonSerializer.Serialize(appEvent));
+                    continue;
                 }
+
+                if (string.Equals(existing.State, current.State, StringComparison.Ordinal))
+                {
+                    // 同じ状態は区間を延長し、保存はしない（重複抑制）。
+                    intervalsByApp[appKey] = existing with
+                    {
+                        StateEndUtc = observedAtUtc,
+                        Pid = current.Pid,
+                        Hwnd = current.Hwnd,
+                        Title = current.Title
+                    };
+                    continue;
+                }
+
+                // 状態遷移を検知したら、前区間を確定して保存。
+                AppInterval closedInterval = existing with { StateEndUtc = observedAtUtc };
+                WriteClosedInterval(eventWriter, closedInterval);
+
+                intervalsByApp[appKey] = new AppInterval(
+                    StateStartUtc: observedAtUtc,
+                    StateEndUtc: observedAtUtc,
+                    ExeName: current.ExeName,
+                    Pid: current.Pid,
+                    Hwnd: current.Hwnd,
+                    Title: current.Title,
+                    State: current.State);
             }
 
-            foreach (string removedKey in lastByApp.Keys.Except(currentByApp.Keys).ToList())
+            foreach (string removedKey in intervalsByApp.Keys.Except(currentByApp.Keys).ToList())
             {
-                lastByApp.Remove(removedKey);
-            }
-
-            foreach ((string appKey, AppSnapshot snapshot) in currentByApp)
-            {
-                lastByApp[appKey] = snapshot;
+                AppInterval closedInterval = intervalsByApp[removedKey] with { StateEndUtc = observedAtUtc };
+                WriteClosedInterval(eventWriter, closedInterval);
+                intervalsByApp.Remove(removedKey);
             }
 
             try
@@ -67,6 +96,34 @@ internal static class ForegroundCollector
                 break;
             }
         }
+
+        // 停止時に未確定区間をflushする。
+        DateTimeOffset stoppedAtUtc = DateTimeOffset.UtcNow;
+        foreach (AppInterval intervalState in intervalsByApp.Values)
+        {
+            WriteClosedInterval(eventWriter, intervalState with { StateEndUtc = stoppedAtUtc });
+        }
+    }
+
+    private static void WriteClosedInterval(JsonlEventWriter eventWriter, AppInterval interval)
+    {
+        if (interval.StateEndUtc < interval.StateStartUtc)
+        {
+            return;
+        }
+
+        var appEvent = new AppEvent(
+            StateStartUtc: interval.StateStartUtc,
+            StateEndUtc: interval.StateEndUtc,
+            ExeName: interval.ExeName,
+            Pid: interval.Pid,
+            Hwnd: interval.Hwnd,
+            Title: interval.Title,
+            State: interval.State,
+            Source: "polling");
+
+        eventWriter.Write(appEvent);
+        Console.WriteLine(JsonSerializer.Serialize(appEvent));
     }
 
     private static Dictionary<string, AppSnapshot> CaptureCurrentStates()
@@ -252,7 +309,18 @@ internal static class ForegroundCollector
 }
 
 internal readonly record struct AppEvent(
-    DateTimeOffset EventAtUtc,
+    DateTimeOffset StateStartUtc,
+    DateTimeOffset StateEndUtc,
+    string ExeName,
+    uint Pid,
+    string Hwnd,
+    string Title,
+    string State,
+    string Source);
+
+internal readonly record struct AppInterval(
+    DateTimeOffset StateStartUtc,
+    DateTimeOffset StateEndUtc,
     string ExeName,
     uint Pid,
     string Hwnd,
@@ -265,6 +333,50 @@ internal readonly record struct AppSnapshot(
     string Hwnd,
     string Title,
     string State);
+
+internal sealed class JsonlEventWriter : IDisposable
+{
+    private readonly string _directoryPath;
+    private readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
+    private StreamWriter? _writer;
+    private string? _activeDateKey;
+
+    public JsonlEventWriter(string directoryPath)
+    {
+        _directoryPath = directoryPath;
+        Directory.CreateDirectory(_directoryPath);
+    }
+
+    public void Write(AppEvent appEvent)
+    {
+        string dateKey = appEvent.StateEndUtc.UtcDateTime.ToString("yyyyMMdd");
+        EnsureWriter(dateKey);
+
+        string line = JsonSerializer.Serialize(appEvent, _jsonOptions);
+        _writer!.WriteLine(line);
+        _writer.Flush();
+    }
+
+    public void Dispose() => _writer?.Dispose();
+
+    private void EnsureWriter(string dateKey)
+    {
+        if (_writer is not null && string.Equals(_activeDateKey, dateKey, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _writer?.Dispose();
+        string filePath = Path.Combine(_directoryPath, $"events-{dateKey}.jsonl");
+        var stream = new FileStream(filePath, FileMode.Append, FileAccess.Write, FileShare.Read);
+        _writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        _activeDateKey = dateKey;
+    }
+}
 
 internal static class Win32
 {
