@@ -15,20 +15,47 @@ await ForegroundCollector.RunPollingAsync(TimeSpan.FromSeconds(1), cts.Token);
 
 internal static class ForegroundCollector
 {
+    // 学習用の暫定除外リスト。環境に合わせて調整する。
+    private static readonly HashSet<string> ExcludedExeNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "dwm.exe",
+        "TextInputHost.exe",
+        "NVIDIA Overlay.exe",
+        "Overwolf.exe",
+        "ArmourySwAgent.exe"
+    };
+
     public static async Task RunPollingAsync(TimeSpan interval, CancellationToken cancellationToken)
     {
-        string? lastKey = null;
+        var lastByApp = new Dictionary<string, AppSnapshot>(StringComparer.OrdinalIgnoreCase);
         while (!cancellationToken.IsCancellationRequested)
         {
-            AppEvent? appEvent = TryCaptureActive();
-            if (appEvent is AppEvent current)
+            Dictionary<string, AppSnapshot> currentByApp = CaptureCurrentStates();
+            foreach ((string appKey, AppSnapshot current) in currentByApp)
             {
-                string key = $"{current.ExeName}|{current.Pid}|{current.Hwnd}|{current.State}";
-                if (!string.Equals(lastKey, key, StringComparison.Ordinal))
+                if (!lastByApp.TryGetValue(appKey, out AppSnapshot previous) ||
+                    !string.Equals(previous.State, current.State, StringComparison.Ordinal))
                 {
-                    Console.WriteLine(JsonSerializer.Serialize(current));
-                    lastKey = key;
+                    var appEvent = new AppEvent(
+                        EventAtUtc: DateTimeOffset.UtcNow,
+                        ExeName: current.ExeName,
+                        Pid: current.Pid,
+                        Hwnd: current.Hwnd,
+                        Title: current.Title,
+                        State: current.State);
+
+                    Console.WriteLine(JsonSerializer.Serialize(appEvent));
                 }
+            }
+
+            foreach (string removedKey in lastByApp.Keys.Except(currentByApp.Keys).ToList())
+            {
+                lastByApp.Remove(removedKey);
+            }
+
+            foreach ((string appKey, AppSnapshot snapshot) in currentByApp)
+            {
+                lastByApp[appKey] = snapshot;
             }
 
             try
@@ -42,32 +69,154 @@ internal static class ForegroundCollector
         }
     }
 
-    private static AppEvent? TryCaptureActive()
+    private static Dictionary<string, AppSnapshot> CaptureCurrentStates()
     {
-        IntPtr hwnd = Win32.GetForegroundWindow();
-        if (hwnd == IntPtr.Zero)
+        var byApp = new Dictionary<string, AppSnapshot>(StringComparer.OrdinalIgnoreCase);
+        var exeNameCache = new Dictionary<uint, string>();
+
+        IntPtr shellWindow = Win32.GetShellWindow();
+        _ = Win32.EnumWindows((hwnd, _) =>
         {
-            Console.WriteLine($"GetForegroundWindow failed: {Marshal.GetLastWin32Error()}");
-            return null;
+            if (hwnd == IntPtr.Zero || hwnd == shellWindow)
+            {
+                return true;
+            }
+
+            bool minimized = Win32.IsIconic(hwnd);
+            bool visible = Win32.IsWindowVisible(hwnd);
+            if (!visible && !minimized)
+            {
+                return true;
+            }
+
+            uint threadId = Win32.GetWindowThreadProcessId(hwnd, out uint pid);
+            if (threadId == 0 || pid == 0)
+            {
+                return true;
+            }
+
+            string exeName = GetExeName(pid, exeNameCache);
+            string title = GetWindowTitle(hwnd);
+            string state = minimized ? "Minimized" : "Open";
+            if (!ShouldTrackWindow(hwnd, exeName, title, minimized))
+            {
+                return true;
+            }
+
+            var candidate = new AppSnapshot(
+                ExeName: exeName,
+                Pid: pid,
+                Hwnd: ToHexHwnd(hwnd),
+                Title: title,
+                State: state);
+
+            MergeByPriority(byApp, candidate);
+            return true;
+        }, IntPtr.Zero);
+
+        IntPtr fgHwnd = Win32.GetForegroundWindow();
+        if (fgHwnd == IntPtr.Zero)
+        {
+            return byApp;
         }
 
-        uint threadId = Win32.GetWindowThreadProcessId(hwnd, out uint pid);
-        if (threadId == 0 || pid == 0)
+        uint fgThreadId = Win32.GetWindowThreadProcessId(fgHwnd, out uint fgPid);
+        if (fgThreadId == 0 || fgPid == 0)
         {
             Console.WriteLine($"GetWindowThreadProcessId failed: {Marshal.GetLastWin32Error()}");
-            return null;
+            return byApp;
         }
 
-        string title = GetWindowTitle(hwnd);
-        string exeName = GetExeName(pid);
-
-        return new AppEvent(
-            EventAtUtc: DateTimeOffset.UtcNow,
-            ExeName: exeName,
-            Pid: pid,
-            Hwnd: ToHexHwnd(hwnd),
-            Title: title,
+        var active = new AppSnapshot(
+            ExeName: GetExeName(fgPid, exeNameCache),
+            Pid: fgPid,
+            Hwnd: ToHexHwnd(fgHwnd),
+            Title: GetWindowTitle(fgHwnd),
             State: "Active");
+
+        MergeByPriority(byApp, active);
+        return byApp;
+    }
+
+    private static bool ShouldTrackWindow(IntPtr hwnd, string exeName, string title, bool minimized)
+    {
+        if (ExcludedExeNames.Contains(exeName))
+        {
+            return false;
+        }
+
+        if (Win32.GetWindow(hwnd, Win32.GW_OWNER) != IntPtr.Zero)
+        {
+            return false;
+        }
+
+        if (!minimized && string.IsNullOrWhiteSpace(title))
+        {
+            return false;
+        }
+
+        if (!minimized && Win32.IsWindowCloaked(hwnd))
+        {
+            return false;
+        }
+
+        if (!minimized && Win32.TryGetWindowRect(hwnd, out Win32.RECT rect))
+        {
+            int width = rect.Right - rect.Left;
+            int height = rect.Bottom - rect.Top;
+            if (width < 50 || height < 50)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static void MergeByPriority(Dictionary<string, AppSnapshot> byApp, AppSnapshot candidate)
+    {
+        string key = candidate.ExeName;
+        if (!byApp.TryGetValue(key, out AppSnapshot existing))
+        {
+            byApp[key] = candidate;
+            return;
+        }
+
+        int candidatePriority = GetStatePriority(candidate.State);
+        int existingPriority = GetStatePriority(existing.State);
+        if (candidatePriority > existingPriority)
+        {
+            byApp[key] = candidate;
+            return;
+        }
+
+        if (candidatePriority == existingPriority &&
+            string.IsNullOrEmpty(existing.Title) &&
+            !string.IsNullOrEmpty(candidate.Title))
+        {
+            byApp[key] = candidate;
+        }
+    }
+
+    private static int GetStatePriority(string state) =>
+        state switch
+        {
+            "Active" => 3,
+            "Minimized" => 2,
+            "Open" => 1,
+            _ => 0
+        };
+
+    private static string GetExeName(uint pid, Dictionary<uint, string> cache)
+    {
+        if (cache.TryGetValue(pid, out string? cached))
+        {
+            return cached;
+        }
+
+        string exeName = GetExeName(pid);
+        cache[pid] = exeName;
+        return exeName;
     }
 
     private static string GetWindowTitle(IntPtr hwnd)
@@ -110,17 +259,75 @@ internal readonly record struct AppEvent(
     string Title,
     string State);
 
+internal readonly record struct AppSnapshot(
+    string ExeName,
+    uint Pid,
+    string Hwnd,
+    string Title,
+    string State);
+
 internal static class Win32
 {
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+    public const uint GW_OWNER = 4;
+    private const uint DWMWA_CLOAKED = 14;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern IntPtr GetShellWindow();
+
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     public static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "GetWindowTextLengthW")]
-    public static extern int GetWindowTextLength(IntPtr hWnd);
-    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "GetWindowTextW")]
-    public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool IsWindow(IntPtr hWnd);
+    public static extern bool IsIconic(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [DllImport("dwmapi.dll", SetLastError = true)]
+    private static extern int DwmGetWindowAttribute(IntPtr hwnd, uint dwAttribute, out int pvAttribute, int cbAttribute);
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "GetWindowTextLengthW")]
+    public static extern int GetWindowTextLength(IntPtr hWnd);
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "GetWindowTextW")]
+    public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+    public static bool IsWindowCloaked(IntPtr hWnd)
+    {
+        int cloaked = 0;
+        int hr = DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, out cloaked, sizeof(int));
+        if (hr != 0)
+        {
+            return false;
+        }
+
+        return cloaked != 0;
+    }
+
+    public static bool TryGetWindowRect(IntPtr hWnd, out RECT rect) => GetWindowRect(hWnd, out rect);
 }
