@@ -1,6 +1,11 @@
 string settingsPath = Path.Combine(Environment.CurrentDirectory, "collector.settings.json");
 CollectorSettings settings = CollectorSettingsLoader.Load(settingsPath);
 
+if (UsageReportConsole.TryHandle(args, settings, Environment.CurrentDirectory))
+{
+    return;
+}
+
 using var singleInstanceMutex = new Mutex(
     initiallyOwned: true,
     name: @"Local\WinTrackerCollector",
