@@ -1,5 +1,6 @@
 {
   "pollingIntervalSeconds": 1,
+  "sqliteFilePath": "data/collector.db",
   "excludedExeNames": [
     "dwm.exe",
     "TextInputHost.exe",

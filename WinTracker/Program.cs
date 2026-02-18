@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Diagnostics;
 using System.Text.Json;
-using System.Text.Encodings.Web;
+using Microsoft.Data.Sqlite;
 
 string settingsPath = Path.Combine(Environment.CurrentDirectory, "collector.settings.json");
 CollectorSettings settings = CollectorSettingsLoader.Load(settingsPath);
@@ -20,9 +20,9 @@ if (!isFirstInstance)
 
 Console.WriteLine("Foreground polling started. Press Ctrl+C to stop.");
 Console.WriteLine($"Polling interval: {settings.PollingIntervalSeconds}s");
-string logDirectoryPath = Path.Combine(Environment.CurrentDirectory, "logs");
-using var eventWriter = new JsonlEventWriter(logDirectoryPath);
-Console.WriteLine($"Logging to: {logDirectoryPath}");
+string sqlitePath = Path.Combine(Environment.CurrentDirectory, settings.SqliteFilePath);
+using var eventWriter = new SqliteEventWriter(sqlitePath);
+Console.WriteLine($"Logging to SQLite: {sqlitePath}");
 
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) =>
@@ -42,7 +42,7 @@ internal static class ForegroundCollector
     public static async Task RunPollingAsync(
         TimeSpan interval,
         CancellationToken cancellationToken,
-        JsonlEventWriter eventWriter,
+        IAppEventWriter eventWriter,
         CollectorSettings settings)
     {
         var excludedExeNames = new HashSet<string>(settings.ExcludedExeNames, StringComparer.OrdinalIgnoreCase);
@@ -119,7 +119,7 @@ internal static class ForegroundCollector
         }
     }
 
-    private static void WriteClosedInterval(JsonlEventWriter eventWriter, AppInterval interval)
+    private static void WriteClosedInterval(IAppEventWriter eventWriter, AppInterval interval)
     {
         if (interval.StateEndUtc < interval.StateStartUtc)
         {
@@ -356,6 +356,7 @@ internal readonly record struct AppSnapshot(
 internal sealed class CollectorSettings
 {
     public int PollingIntervalSeconds { get; init; } = 1;
+    public string SqliteFilePath { get; init; } = Path.Combine("data", "collector.db");
 
     public string[] ExcludedExeNames { get; init; } =
     [
@@ -406,9 +407,14 @@ internal static class CollectorSettingsLoader
                 excludedExeNames = new CollectorSettings().ExcludedExeNames;
             }
 
+            string sqliteFilePath = string.IsNullOrWhiteSpace(parsed.SqliteFilePath)
+                ? new CollectorSettings().SqliteFilePath
+                : parsed.SqliteFilePath;
+
             return new CollectorSettings
             {
                 PollingIntervalSeconds = interval,
+                SqliteFilePath = sqliteFilePath,
                 ExcludedExeNames = excludedExeNames
             };
         }
@@ -420,62 +426,109 @@ internal static class CollectorSettingsLoader
     }
 }
 
-internal sealed class JsonlEventWriter : IDisposable
+internal interface IAppEventWriter : IDisposable
 {
-    private readonly string _directoryPath;
-    private readonly JsonSerializerOptions _jsonOptions = new()
-    {
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-    };
+    void Write(AppEvent appEvent);
+}
 
-    private StreamWriter? _writer;
-    private string? _activeDateKey;
+internal sealed class SqliteEventWriter : IAppEventWriter
+{
+    private readonly SqliteConnection _connection;
+    private readonly SqliteCommand _insertCommand;
 
-    public JsonlEventWriter(string directoryPath)
+    public SqliteEventWriter(string databasePath)
     {
-        _directoryPath = directoryPath;
-        Directory.CreateDirectory(_directoryPath);
+        string? directoryPath = Path.GetDirectoryName(databasePath);
+        if (!string.IsNullOrWhiteSpace(directoryPath))
+        {
+            Directory.CreateDirectory(directoryPath);
+        }
+
+        _connection = new SqliteConnection($"Data Source={databasePath};Mode=ReadWriteCreate;Cache=Shared");
+        _connection.Open();
+        InitializeSchema(_connection);
+
+        _insertCommand = _connection.CreateCommand();
+        _insertCommand.CommandText =
+            """
+            INSERT INTO app_events (
+                event_at_utc,
+                state_start_utc,
+                state_end_utc,
+                exe_name,
+                pid,
+                hwnd,
+                title,
+                state,
+                source
+            ) VALUES (
+                $event_at_utc,
+                $state_start_utc,
+                $state_end_utc,
+                $exe_name,
+                $pid,
+                $hwnd,
+                $title,
+                $state,
+                $source
+            );
+            """;
+        _insertCommand.Parameters.Add("$event_at_utc", SqliteType.Text);
+        _insertCommand.Parameters.Add("$state_start_utc", SqliteType.Text);
+        _insertCommand.Parameters.Add("$state_end_utc", SqliteType.Text);
+        _insertCommand.Parameters.Add("$exe_name", SqliteType.Text);
+        _insertCommand.Parameters.Add("$pid", SqliteType.Integer);
+        _insertCommand.Parameters.Add("$hwnd", SqliteType.Text);
+        _insertCommand.Parameters.Add("$title", SqliteType.Text);
+        _insertCommand.Parameters.Add("$state", SqliteType.Text);
+        _insertCommand.Parameters.Add("$source", SqliteType.Text);
     }
 
     public void Write(AppEvent appEvent)
     {
-        string dateKey = appEvent.StateEndUtc.UtcDateTime.ToString("yyyyMMdd");
-        EnsureWriter(dateKey);
-
-        string line = JsonSerializer.Serialize(appEvent, _jsonOptions);
-        _writer!.WriteLine(line);
-        _writer.Flush();
+        _insertCommand.Parameters["$event_at_utc"].Value = appEvent.StateEndUtc.ToString("O");
+        _insertCommand.Parameters["$state_start_utc"].Value = appEvent.StateStartUtc.ToString("O");
+        _insertCommand.Parameters["$state_end_utc"].Value = appEvent.StateEndUtc.ToString("O");
+        _insertCommand.Parameters["$exe_name"].Value = appEvent.ExeName;
+        _insertCommand.Parameters["$pid"].Value = (long)appEvent.Pid;
+        _insertCommand.Parameters["$hwnd"].Value = appEvent.Hwnd;
+        _insertCommand.Parameters["$title"].Value = appEvent.Title;
+        _insertCommand.Parameters["$state"].Value = appEvent.State;
+        _insertCommand.Parameters["$source"].Value = appEvent.Source;
+        _insertCommand.ExecuteNonQuery();
     }
 
-    public void Dispose() => _writer?.Dispose();
-
-    private void EnsureWriter(string dateKey)
+    public void Dispose()
     {
-        if (_writer is not null && string.Equals(_activeDateKey, dateKey, StringComparison.Ordinal))
-        {
-            return;
-        }
+        _insertCommand.Dispose();
+        _connection.Dispose();
+    }
 
-        _writer?.Dispose();
+    private static void InitializeSchema(SqliteConnection connection)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            """
+            CREATE TABLE IF NOT EXISTS app_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_at_utc TEXT NOT NULL,
+                state_start_utc TEXT NOT NULL,
+                state_end_utc TEXT NOT NULL,
+                exe_name TEXT NOT NULL,
+                pid INTEGER NOT NULL,
+                hwnd TEXT NOT NULL,
+                title TEXT NOT NULL,
+                state TEXT NOT NULL,
+                source TEXT NOT NULL
+            );
 
-        string primaryPath = Path.Combine(_directoryPath, $"events-{dateKey}.jsonl");
-        string fallbackPath = Path.Combine(_directoryPath, $"events-{dateKey}-{Environment.ProcessId}.jsonl");
-        string targetPath = primaryPath;
+            CREATE INDEX IF NOT EXISTS idx_app_events_time
+            ON app_events(event_at_utc);
 
-        try
-        {
-            var stream = new FileStream(primaryPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
-            _writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        }
-        catch (IOException)
-        {
-            var stream = new FileStream(fallbackPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
-            _writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            targetPath = fallbackPath;
-            Console.WriteLine($"Log file in use. Fallback to: {targetPath}");
-        }
-
-        _activeDateKey = dateKey;
+            CREATE INDEX IF NOT EXISTS idx_app_events_exe_time
+            ON app_events(exe_name, event_at_utc);
+            """;
+        command.ExecuteNonQuery();
     }
 }
 
