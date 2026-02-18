@@ -7,6 +7,17 @@ using System.Text.Encodings.Web;
 string settingsPath = Path.Combine(Environment.CurrentDirectory, "collector.settings.json");
 CollectorSettings settings = CollectorSettingsLoader.Load(settingsPath);
 
+using var singleInstanceMutex = new Mutex(
+    initiallyOwned: true,
+    name: @"Local\WinTrackerCollector",
+    createdNew: out bool isFirstInstance);
+
+if (!isFirstInstance)
+{
+    Console.WriteLine("Collector is already running. Exit.");
+    return;
+}
+
 Console.WriteLine("Foreground polling started. Press Ctrl+C to stop.");
 Console.WriteLine($"Polling interval: {settings.PollingIntervalSeconds}s");
 string logDirectoryPath = Path.Combine(Environment.CurrentDirectory, "logs");
