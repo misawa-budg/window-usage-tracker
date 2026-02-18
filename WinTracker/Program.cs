@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Threading.Channels;
 using Microsoft.Data.Sqlite;
 
 string settingsPath = Path.Combine(Environment.CurrentDirectory, "collector.settings.json");
@@ -18,8 +19,8 @@ if (!isFirstInstance)
     return;
 }
 
-Console.WriteLine("Foreground polling started. Press Ctrl+C to stop.");
-Console.WriteLine($"Polling interval: {settings.PollingIntervalSeconds}s");
+Console.WriteLine("Event-driven collector started. Press Ctrl+C to stop.");
+Console.WriteLine($"Rescan interval: {settings.RescanIntervalSeconds}s");
 string sqlitePath = Path.Combine(Environment.CurrentDirectory, settings.SqliteFilePath);
 using var eventWriter = new SqliteEventWriter(sqlitePath);
 Console.WriteLine($"Logging to SQLite: {sqlitePath}");
@@ -31,59 +32,101 @@ Console.CancelKeyPress += (_, e) =>
     cts.Cancel();
 };
 
-await ForegroundCollector.RunPollingAsync(
-    TimeSpan.FromSeconds(settings.PollingIntervalSeconds),
+await ForegroundCollector.RunEventDrivenAsync(
     cts.Token,
     eventWriter,
     settings);
 
 internal static class ForegroundCollector
 {
-    public static async Task RunPollingAsync(
-        TimeSpan interval,
+    public static async Task RunEventDrivenAsync(
         CancellationToken cancellationToken,
         IAppEventWriter eventWriter,
         CollectorSettings settings)
     {
         var excludedExeNames = new HashSet<string>(settings.ExcludedExeNames, StringComparer.OrdinalIgnoreCase);
         var intervalsByApp = new Dictionary<string, AppInterval>(StringComparer.OrdinalIgnoreCase);
-        while (!cancellationToken.IsCancellationRequested)
+        var signals = Channel.CreateUnbounded<CollectReason>(new UnboundedChannelOptions
         {
-            DateTimeOffset observedAtUtc = DateTimeOffset.UtcNow;
-            Dictionary<string, AppSnapshot> currentByApp = CaptureCurrentStates(excludedExeNames);
+            SingleReader = true,
+            SingleWriter = false
+        });
 
-            foreach ((string appKey, AppSnapshot current) in currentByApp)
+        using var hookPump = new WinEventHookPump(reason => _ = signals.Writer.TryWrite(reason));
+        hookPump.Start();
+        _ = signals.Writer.TryWrite(CollectReason.Startup);
+
+        using var rescanTimer = new PeriodicTimer(TimeSpan.FromSeconds(settings.RescanIntervalSeconds));
+        Task rescanTask = Task.Run(async () =>
+        {
+            try
             {
-                if (!intervalsByApp.TryGetValue(appKey, out AppInterval existing))
+                while (await rescanTimer.WaitForNextTickAsync(cancellationToken))
                 {
-                    intervalsByApp[appKey] = new AppInterval(
-                        StateStartUtc: observedAtUtc,
-                        StateEndUtc: observedAtUtc,
-                        ExeName: current.ExeName,
-                        Pid: current.Pid,
-                        Hwnd: current.Hwnd,
-                        Title: current.Title,
-                        State: current.State);
-                    continue;
+                    _ = signals.Writer.TryWrite(CollectReason.Rescan);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        });
+
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                CollectReason reason;
+                try
+                {
+                    reason = await signals.Reader.ReadAsync(cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
                 }
 
-                if (string.Equals(existing.State, current.State, StringComparison.Ordinal))
+                // 連続イベントはまとめて1回のスナップショット評価にする。
+                while (signals.Reader.TryRead(out CollectReason nextReason))
                 {
-                    // 同じ状態は区間を延長し、保存はしない（重複抑制）。
-                    intervalsByApp[appKey] = existing with
-                    {
-                        StateEndUtc = observedAtUtc,
-                        Pid = current.Pid,
-                        Hwnd = current.Hwnd,
-                        Title = current.Title
-                    };
-                    continue;
+                    reason = nextReason;
                 }
 
-                // 状態遷移を検知したら、前区間を確定して保存。
-                AppInterval closedInterval = existing with { StateEndUtc = observedAtUtc };
-                WriteClosedInterval(eventWriter, closedInterval);
+                DateTimeOffset observedAtUtc = DateTimeOffset.UtcNow;
+                Dictionary<string, AppSnapshot> currentByApp = CaptureCurrentStates(excludedExeNames);
+                string source = reason == CollectReason.Rescan ? "rescan" : "win_event";
+                ApplySnapshot(currentByApp, observedAtUtc, source, intervalsByApp, eventWriter);
+            }
+        }
+        finally
+        {
+            // 停止時に未確定区間をflushする。
+            DateTimeOffset stoppedAtUtc = DateTimeOffset.UtcNow;
+            foreach (AppInterval intervalState in intervalsByApp.Values)
+            {
+                WriteClosedInterval(eventWriter, intervalState with { StateEndUtc = stoppedAtUtc }, "shutdown");
+            }
 
+            try
+            {
+                await rescanTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+    }
+
+    private static void ApplySnapshot(
+        Dictionary<string, AppSnapshot> currentByApp,
+        DateTimeOffset observedAtUtc,
+        string source,
+        Dictionary<string, AppInterval> intervalsByApp,
+        IAppEventWriter eventWriter)
+    {
+        foreach ((string appKey, AppSnapshot current) in currentByApp)
+        {
+            if (!intervalsByApp.TryGetValue(appKey, out AppInterval existing))
+            {
                 intervalsByApp[appKey] = new AppInterval(
                     StateStartUtc: observedAtUtc,
                     StateEndUtc: observedAtUtc,
@@ -92,34 +135,43 @@ internal static class ForegroundCollector
                     Hwnd: current.Hwnd,
                     Title: current.Title,
                     State: current.State);
+                continue;
             }
 
-            foreach (string removedKey in intervalsByApp.Keys.Except(currentByApp.Keys).ToList())
+            if (string.Equals(existing.State, current.State, StringComparison.Ordinal))
             {
-                AppInterval closedInterval = intervalsByApp[removedKey] with { StateEndUtc = observedAtUtc };
-                WriteClosedInterval(eventWriter, closedInterval);
-                intervalsByApp.Remove(removedKey);
+                intervalsByApp[appKey] = existing with
+                {
+                    StateEndUtc = observedAtUtc,
+                    Pid = current.Pid,
+                    Hwnd = current.Hwnd,
+                    Title = current.Title
+                };
+                continue;
             }
 
-            try
-            {
-                await Task.Delay(interval, cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
+            AppInterval closedInterval = existing with { StateEndUtc = observedAtUtc };
+            WriteClosedInterval(eventWriter, closedInterval, source);
+
+            intervalsByApp[appKey] = new AppInterval(
+                StateStartUtc: observedAtUtc,
+                StateEndUtc: observedAtUtc,
+                ExeName: current.ExeName,
+                Pid: current.Pid,
+                Hwnd: current.Hwnd,
+                Title: current.Title,
+                State: current.State);
         }
 
-        // 停止時に未確定区間をflushする。
-        DateTimeOffset stoppedAtUtc = DateTimeOffset.UtcNow;
-        foreach (AppInterval intervalState in intervalsByApp.Values)
+        foreach (string removedKey in intervalsByApp.Keys.Except(currentByApp.Keys).ToList())
         {
-            WriteClosedInterval(eventWriter, intervalState with { StateEndUtc = stoppedAtUtc });
+            AppInterval closedInterval = intervalsByApp[removedKey] with { StateEndUtc = observedAtUtc };
+            WriteClosedInterval(eventWriter, closedInterval, source);
+            intervalsByApp.Remove(removedKey);
         }
     }
 
-    private static void WriteClosedInterval(IAppEventWriter eventWriter, AppInterval interval)
+    private static void WriteClosedInterval(IAppEventWriter eventWriter, AppInterval interval, string source)
     {
         if (interval.StateEndUtc < interval.StateStartUtc)
         {
@@ -134,7 +186,7 @@ internal static class ForegroundCollector
             Hwnd: interval.Hwnd,
             Title: interval.Title,
             State: interval.State,
-            Source: "polling");
+            Source: source);
 
         eventWriter.Write(appEvent);
         Console.WriteLine(JsonSerializer.Serialize(appEvent));
@@ -204,6 +256,11 @@ internal static class ForegroundCollector
             Hwnd: ToHexHwnd(fgHwnd),
             Title: GetWindowTitle(fgHwnd),
             State: "Active");
+
+        if (!ShouldTrackWindow(fgHwnd, active.ExeName, active.Title, minimized: false, excludedExeNames))
+        {
+            return byApp;
+        }
 
         MergeByPriority(byApp, active);
         return byApp;
@@ -353,9 +410,131 @@ internal readonly record struct AppSnapshot(
     string Title,
     string State);
 
+internal enum CollectReason
+{
+    Startup,
+    WinEvent,
+    Rescan
+}
+
+internal sealed class WinEventHookPump : IDisposable
+{
+    private readonly Action<CollectReason> _onEvent;
+    private readonly ManualResetEventSlim _started = new(false);
+    private readonly List<IntPtr> _hookHandles = [];
+    private Thread? _thread;
+    private uint _threadId;
+    private Exception? _startException;
+    private Win32.WinEventProc? _callback;
+
+    public WinEventHookPump(Action<CollectReason> onEvent)
+    {
+        _onEvent = onEvent;
+    }
+
+    public void Start()
+    {
+        _thread = new Thread(ThreadMain)
+        {
+            IsBackground = true,
+            Name = "WinEventHookPump"
+        };
+        _thread.Start();
+        _started.Wait();
+
+        if (_startException is not null)
+        {
+            throw new InvalidOperationException("Failed to start WinEvent hooks.", _startException);
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_threadId != 0)
+        {
+            _ = Win32.PostThreadMessage(_threadId, Win32.WM_QUIT, IntPtr.Zero, IntPtr.Zero);
+        }
+
+        _thread?.Join(3000);
+        _started.Dispose();
+    }
+
+    private void ThreadMain()
+    {
+        try
+        {
+            _threadId = Win32.GetCurrentThreadId();
+            _ = Win32.PeekMessage(out _, IntPtr.Zero, 0, 0, Win32.PM_NOREMOVE);
+
+            _callback = HandleWinEvent;
+            RegisterHook(Win32.EVENT_SYSTEM_FOREGROUND);
+            RegisterHook(Win32.EVENT_SYSTEM_MINIMIZESTART);
+            RegisterHook(Win32.EVENT_SYSTEM_MINIMIZEEND);
+
+            _started.Set();
+
+            while (Win32.GetMessage(out Win32.MSG msg, IntPtr.Zero, 0, 0) > 0)
+            {
+                _ = Win32.TranslateMessage(ref msg);
+                _ = Win32.DispatchMessage(ref msg);
+            }
+        }
+        catch (Exception ex)
+        {
+            _startException = ex;
+            _started.Set();
+        }
+        finally
+        {
+            foreach (IntPtr hookHandle in _hookHandles)
+            {
+                _ = Win32.UnhookWinEvent(hookHandle);
+            }
+        }
+    }
+
+    private void RegisterHook(uint eventType)
+    {
+        IntPtr hookHandle = Win32.SetWinEventHook(
+            eventType,
+            eventType,
+            IntPtr.Zero,
+            _callback!,
+            0,
+            0,
+            Win32.WINEVENT_OUTOFCONTEXT | Win32.WINEVENT_SKIPOWNPROCESS);
+
+        if (hookHandle == IntPtr.Zero)
+        {
+            throw new InvalidOperationException($"SetWinEventHook failed for 0x{eventType:X}: {Marshal.GetLastWin32Error()}");
+        }
+
+        _hookHandles.Add(hookHandle);
+    }
+
+    private void HandleWinEvent(
+        IntPtr hWinEventHook,
+        uint eventType,
+        IntPtr hwnd,
+        int idObject,
+        int idChild,
+        uint dwEventThread,
+        uint dwmsEventTime)
+    {
+        if (hwnd == IntPtr.Zero || idObject != Win32.OBJID_WINDOW || idChild != 0)
+        {
+            return;
+        }
+
+        _onEvent(CollectReason.WinEvent);
+    }
+}
+
 internal sealed class CollectorSettings
 {
-    public int PollingIntervalSeconds { get; init; } = 1;
+    // 互換性のために残す（旧設定名）。
+    public int PollingIntervalSeconds { get; init; } = 0;
+    public int RescanIntervalSeconds { get; init; } = 300;
     public string SqliteFilePath { get; init; } = Path.Combine("data", "collector.db");
 
     public string[] ExcludedExeNames { get; init; } =
@@ -395,7 +574,9 @@ internal static class CollectorSettingsLoader
                 return new CollectorSettings();
             }
 
-            int interval = parsed.PollingIntervalSeconds <= 0 ? 1 : parsed.PollingIntervalSeconds;
+            int rescanInterval = parsed.RescanIntervalSeconds > 0
+                ? parsed.RescanIntervalSeconds
+                : (parsed.PollingIntervalSeconds > 0 ? parsed.PollingIntervalSeconds : 300);
             string[] excludedExeNames = parsed.ExcludedExeNames
                 .Where(name => !string.IsNullOrWhiteSpace(name))
                 .Select(name => name.Trim())
@@ -413,7 +594,8 @@ internal static class CollectorSettingsLoader
 
             return new CollectorSettings
             {
-                PollingIntervalSeconds = interval,
+                PollingIntervalSeconds = parsed.PollingIntervalSeconds,
+                RescanIntervalSeconds = rescanInterval,
                 SqliteFilePath = sqliteFilePath,
                 ExcludedExeNames = excludedExeNames
             };
@@ -535,6 +717,23 @@ internal sealed class SqliteEventWriter : IAppEventWriter
 internal static class Win32
 {
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+    public delegate void WinEventProc(
+        IntPtr hWinEventHook,
+        uint eventType,
+        IntPtr hwnd,
+        int idObject,
+        int idChild,
+        uint dwEventThread,
+        uint dwmsEventTime);
+
+    public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
+    public const uint EVENT_SYSTEM_MINIMIZESTART = 0x0016;
+    public const uint EVENT_SYSTEM_MINIMIZEEND = 0x0017;
+    public const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+    public const uint WINEVENT_SKIPOWNPROCESS = 0x0002;
+    public const uint WM_QUIT = 0x0012;
+    public const uint PM_NOREMOVE = 0x0000;
+    public const int OBJID_WINDOW = 0;
     public const uint GW_OWNER = 4;
     private const uint DWMWA_CLOAKED = 14;
 
@@ -547,8 +746,56 @@ internal static class Win32
         public int Bottom;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MSG
+    {
+        public IntPtr hwnd;
+        public uint message;
+        public UIntPtr wParam;
+        public IntPtr lParam;
+        public uint time;
+        public int ptX;
+        public int ptY;
+        public uint lPrivate;
+    }
+
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern IntPtr SetWinEventHook(
+        uint eventMin,
+        uint eventMax,
+        IntPtr hmodWinEventProc,
+        WinEventProc lpfnWinEventProc,
+        uint idProcess,
+        uint idThread,
+        uint dwFlags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool UnhookWinEvent(IntPtr hWinEventHook);
+
+    [DllImport("kernel32.dll")]
+    public static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")]
+    public static extern int GetMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool TranslateMessage(ref MSG lpMsg);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr DispatchMessage(ref MSG lpMsg);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PostThreadMessage(uint idThread, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool PeekMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax, uint wRemoveMsg);
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     public static extern IntPtr GetShellWindow();

@@ -3,6 +3,7 @@
 **/[Oo]bj/
 WinTracker/logs/
 WinTracker/data/
+data/
 
 # Visual Studio
 .vs/

@@ -1,5 +1,5 @@
 {
-  "pollingIntervalSeconds": 1,
+  "rescanIntervalSeconds": 300,
   "sqliteFilePath": "data/collector.db",
   "excludedExeNames": [
     "dwm.exe",
