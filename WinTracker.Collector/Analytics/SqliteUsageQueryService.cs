@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using WinTracker.Shared.Analytics;
 
 internal sealed class SqliteUsageQueryService : IDisposable
 {

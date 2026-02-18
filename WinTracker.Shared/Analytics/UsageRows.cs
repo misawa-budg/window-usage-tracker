@@ -1,16 +1,18 @@
-internal readonly record struct AppStateUsageRow(
+namespace WinTracker.Shared.Analytics;
+
+public readonly record struct AppStateUsageRow(
     string ExeName,
     string State,
     double Seconds);
 
-internal readonly record struct AppUsageSummaryRow(
+public readonly record struct AppUsageSummaryRow(
     string ExeName,
     double TotalSeconds,
     double ActiveSeconds,
     double OpenSeconds,
     double MinimizedSeconds);
 
-internal readonly record struct TimelineUsageRow(
+public readonly record struct TimelineUsageRow(
     DateTimeOffset BucketStartUtc,
     string ExeName,
     string State,

@@ -1,3 +1,5 @@
+using WinTracker.Shared.Analytics;
+
 internal static class UsageReportConsole
 {
     public static bool TryHandle(string[] args, CollectorSettings settings, string baseDirectory)

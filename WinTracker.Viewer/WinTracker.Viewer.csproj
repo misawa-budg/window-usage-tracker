@@ -26,4 +26,8 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.22621.756" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\WinTracker.Shared\WinTracker.Shared.csproj" />
+  </ItemGroup>
+
 </Project>

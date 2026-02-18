@@ -1,4 +1,6 @@
-internal readonly record struct UsageQueryWindow(
+namespace WinTracker.Shared.Analytics;
+
+public readonly record struct UsageQueryWindow(
     DateTimeOffset FromUtc,
     DateTimeOffset ToUtc,
     TimeSpan BucketSize)
