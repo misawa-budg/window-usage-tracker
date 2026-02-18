@@ -11,7 +11,7 @@
   - 現在: プレースホルダーのみ（今後、共通モデルやDTOを移動予定）
 - `WinTracker.Viewer`
   - 役割: 蓄積データを可視化するGUI側
-  - 現在: プレースホルダー（GUI方式は後で確定）
+  - UI方針: WinUI 3（Windows App SDK）で実装する
 
 ## 依存関係（方針）
 - `WinTracker.Collector -> WinTracker.Shared`
@@ -28,7 +28,8 @@
 - 保存実装: `WinTracker.Collector/Persistence/`
 - Win32境界: `WinTracker.Collector/Interop/`
 - Collector要件: `docs/requirements_collector.md`
+- Viewer要件: `docs/requirements_viewer.md`
 
 ## 補足
 - `docs/requirements_collector.md` は **Collectorの要件定義書** です。
-- Viewer要件は今後、別ドキュメントとして追加予定です。
+- `docs/requirements_viewer.md` は **Viewerの要件定義書** です。
