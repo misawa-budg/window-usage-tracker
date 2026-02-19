@@ -24,8 +24,17 @@ dotnet run --project .\WinTracker.Viewer\WinTracker.Viewer.csproj
 
 補助コマンド:
 ```powershell
-# ダミーデータ投入
-dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- seed 24h --replace
+# ダミーデータ投入（粗い粒度: 1時間ベース）
+dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- seed 24h hourly --replace
+
+# ダミーデータ投入（混在粒度: 1分〜45分）
+dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- seed 24h mixed --replace
+
+# ダミーデータ投入（細かい粒度: 1〜3分）
+dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- seed 24h minute --replace
+
+# 期間内の全データを削除してseedだけにする（検証用・破壊的）
+dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- seed 24h mixed --replace-all
 
 # 集計レポート（CLI）
 dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- report 24h
@@ -33,6 +42,7 @@ dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- repor
 
 注:
 - `seed` で投入される `source=demo-seed` データは、Viewer表示では除外されます。
+- `--replace` は `source=demo-seed` のみ置換し、`--replace-all` は期間内の全sourceを削除してから投入します。
 
 ## テスト
 ```powershell

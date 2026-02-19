@@ -4,6 +4,13 @@ internal static class DummySeedConsole
 {
     private const string SeedSource = "demo-seed";
 
+    private enum SeedProfile
+    {
+        Hourly,
+        Mixed,
+        Minute
+    }
+
     public static bool TryHandle(string[] args, CollectorSettings settings, string baseDirectory)
     {
         if (args.Length == 0 || !string.Equals(args[0], "seed", StringComparison.OrdinalIgnoreCase))
@@ -12,14 +19,36 @@ internal static class DummySeedConsole
         }
 
         string range = "24h";
+        SeedProfile profile = SeedProfile.Hourly;
         bool replace = false;
+        bool replaceAll = false;
 
-        foreach (string arg in args.Skip(1))
+        for (int i = 1; i < args.Length; i++)
         {
+            string arg = args[i];
+
             if (string.Equals(arg, "24h", StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(arg, "1week", StringComparison.OrdinalIgnoreCase))
             {
                 range = arg.ToLowerInvariant();
+                continue;
+            }
+
+            if (string.Equals(arg, "--profile", StringComparison.OrdinalIgnoreCase))
+            {
+                if (i + 1 >= args.Length || !TryParseProfile(args[i + 1], out profile))
+                {
+                    PrintUsage();
+                    return true;
+                }
+
+                i++;
+                continue;
+            }
+
+            if (TryParseProfile(arg, out SeedProfile inlineProfile))
+            {
+                profile = inlineProfile;
                 continue;
             }
 
@@ -29,7 +58,13 @@ internal static class DummySeedConsole
                 continue;
             }
 
-            Console.WriteLine("Usage: dotnet run --project .\\WinTracker.Collector\\WinTracker.Collector.csproj -- seed [24h|1week] [--replace]");
+            if (string.Equals(arg, "--replace-all", StringComparison.OrdinalIgnoreCase))
+            {
+                replaceAll = true;
+                continue;
+            }
+
+            PrintUsage();
             return true;
         }
 
@@ -41,23 +76,47 @@ internal static class DummySeedConsole
             ? (dayStartLocal.AddDays(-6).ToUniversalTime(), dayStartLocal.AddDays(1).ToUniversalTime())
             : (dayStartLocal.ToUniversalTime(), dayStartLocal.AddDays(1).ToUniversalTime());
 
-        if (replace)
+        if (replaceAll)
         {
-            DeleteExistingSeedRows(sqlitePath, fromUtc, toUtc);
+            DeleteRows(sqlitePath, fromUtc, toUtc, seededOnly: false);
+        }
+        else if (replace)
+        {
+            DeleteRows(sqlitePath, fromUtc, toUtc, seededOnly: true);
         }
 
-        IReadOnlyList<AppEvent> events = BuildEvents(fromUtc, toUtc);
+        IReadOnlyList<AppEvent> events = BuildEvents(fromUtc, toUtc, profile);
         using var writer = new SqliteEventWriter(sqlitePath);
         foreach (AppEvent appEvent in events)
         {
             writer.Write(appEvent);
         }
 
-        Console.WriteLine($"Seed completed: rows={events.Count}, range={range}, replace={replace}, db={sqlitePath}");
+        Console.WriteLine(
+            $"Seed completed: rows={events.Count}, range={range}, profile={profile.ToString().ToLowerInvariant()}, replace={replace}, replaceAll={replaceAll}, db={sqlitePath}");
         return true;
     }
 
-    private static IReadOnlyList<AppEvent> BuildEvents(DateTimeOffset fromUtc, DateTimeOffset toUtc)
+    private static IReadOnlyList<AppEvent> BuildEvents(DateTimeOffset fromUtc, DateTimeOffset toUtc, SeedProfile profile)
+    {
+        return profile switch
+        {
+            SeedProfile.Hourly => BuildHourlyEvents(fromUtc, toUtc),
+            SeedProfile.Mixed => BuildSegmentedEvents(
+                fromUtc,
+                toUtc,
+                durationOptionsSeconds: [60, 120, 300, 600, 900, 1800, 2700],
+                gapOptionsSeconds: [20, 40, 60, 120, 180, 300, 600]),
+            SeedProfile.Minute => BuildSegmentedEvents(
+                fromUtc,
+                toUtc,
+                durationOptionsSeconds: [60, 120, 180],
+                gapOptionsSeconds: [0, 20, 30, 60]),
+            _ => BuildHourlyEvents(fromUtc, toUtc)
+        };
+    }
+
+    private static IReadOnlyList<AppEvent> BuildHourlyEvents(DateTimeOffset fromUtc, DateTimeOffset toUtc)
     {
         string[] apps = ["devenv.exe", "msedge.exe", "powershell.exe"];
         uint[] pids = [31612u, 18268u, 22452u];
@@ -124,6 +183,59 @@ internal static class DummySeedConsole
         return rows;
     }
 
+    private static IReadOnlyList<AppEvent> BuildSegmentedEvents(
+        DateTimeOffset fromUtc,
+        DateTimeOffset toUtc,
+        IReadOnlyList<int> durationOptionsSeconds,
+        IReadOnlyList<int> gapOptionsSeconds)
+    {
+        string[] apps = ["devenv.exe", "msedge.exe", "powershell.exe", "Code.exe", "Slack.exe"];
+        uint[] pids = [31612u, 18268u, 22452u, 4120u, 9800u];
+        string[] hwnds = ["0x320B02", "0x204DE", "0x40912", "0x125AA", "0x8332"];
+        string[] titles =
+        [
+            "WinTracker - Program.cs - Microsoft Visual Studio",
+            "Docs - Microsoft Edge",
+            "Windows PowerShell",
+            "WinTracker - Visual Studio Code",
+            "Slack | WinTracker"
+        ];
+
+        var rows = new List<AppEvent>();
+        const int maxEvents = 200_000;
+
+        for (int appIndex = 0; appIndex < apps.Length; appIndex++)
+        {
+            DateTimeOffset cursor = fromUtc.AddMinutes(appIndex * 3);
+            int step = 0;
+
+            while (cursor < toUtc && rows.Count < maxEvents)
+            {
+                int gapSeconds = PickDeterministic(gapOptionsSeconds, appIndex, step, salt: 17);
+                cursor = cursor.AddSeconds(gapSeconds);
+                if (cursor >= toUtc)
+                {
+                    break;
+                }
+
+                int durationSeconds = PickDeterministic(durationOptionsSeconds, appIndex, step, salt: 31);
+                DateTimeOffset end = cursor.AddSeconds(durationSeconds);
+                if (end > toUtc)
+                {
+                    end = toUtc;
+                }
+
+                string state = ResolveState(appIndex, step);
+                rows.Add(CreateEvent(cursor, end, apps[appIndex], pids[appIndex], hwnds[appIndex], titles[appIndex], state));
+
+                cursor = end;
+                step++;
+            }
+        }
+
+        return rows;
+    }
+
     private static AppEvent CreateEvent(
         DateTimeOffset startUtc,
         DateTimeOffset endUtc,
@@ -144,7 +256,7 @@ internal static class DummySeedConsole
             Source: SeedSource);
     }
 
-    private static void DeleteExistingSeedRows(string sqlitePath, DateTimeOffset fromUtc, DateTimeOffset toUtc)
+    private static void DeleteRows(string sqlitePath, DateTimeOffset fromUtc, DateTimeOffset toUtc, bool seededOnly)
     {
         string? directoryPath = Path.GetDirectoryName(sqlitePath);
         if (!string.IsNullOrWhiteSpace(directoryPath))
@@ -172,13 +284,60 @@ internal static class DummySeedConsole
             );
 
             DELETE FROM app_events
-            WHERE source = $source
-              AND state_end_utc > $from_utc
-              AND state_start_utc < $to_utc;
+            WHERE state_end_utc > $from_utc
+              AND state_start_utc < $to_utc
+              AND ($seed_only = 0 OR source = $source);
             """;
+        command.Parameters.AddWithValue("$seed_only", seededOnly ? 1 : 0);
         command.Parameters.AddWithValue("$source", SeedSource);
         command.Parameters.AddWithValue("$from_utc", fromUtc.ToString("O"));
         command.Parameters.AddWithValue("$to_utc", toUtc.ToString("O"));
         command.ExecuteNonQuery();
+    }
+
+    private static void PrintUsage()
+    {
+        Console.WriteLine("Usage: dotnet run --project .\\WinTracker.Collector\\WinTracker.Collector.csproj -- seed [24h|1week] [hourly|mixed|minute] [--profile <hourly|mixed|minute>] [--replace] [--replace-all]");
+    }
+
+    private static bool TryParseProfile(string value, out SeedProfile profile)
+    {
+        if (string.Equals(value, "hourly", StringComparison.OrdinalIgnoreCase))
+        {
+            profile = SeedProfile.Hourly;
+            return true;
+        }
+
+        if (string.Equals(value, "mixed", StringComparison.OrdinalIgnoreCase))
+        {
+            profile = SeedProfile.Mixed;
+            return true;
+        }
+
+        if (string.Equals(value, "minute", StringComparison.OrdinalIgnoreCase))
+        {
+            profile = SeedProfile.Minute;
+            return true;
+        }
+
+        profile = SeedProfile.Hourly;
+        return false;
+    }
+
+    private static int PickDeterministic(IReadOnlyList<int> options, int appIndex, int step, int salt)
+    {
+        int hash = unchecked((appIndex + 1) * 1_000_003 + (step + 1) * 37 + salt * 97);
+        int index = Math.Abs(hash) % options.Count;
+        return options[index];
+    }
+
+    private static string ResolveState(int appIndex, int step)
+    {
+        if (((step + appIndex) % 7) == 0)
+        {
+            return "Active";
+        }
+
+        return ((step + appIndex) % 3) == 0 ? "Minimized" : "Open";
     }
 }
