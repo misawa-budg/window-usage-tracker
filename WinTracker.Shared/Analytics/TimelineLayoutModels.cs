@@ -1,0 +1,21 @@
+namespace WinTracker.Shared.Analytics;
+
+public readonly record struct SegmentLayout(
+    double Width,
+    string Tooltip,
+    string ColorHex,
+    bool IsNoData = false);
+
+public readonly record struct TimelineRowLayout(
+    string BucketLabel,
+    string TotalLabel,
+    IReadOnlyList<SegmentLayout> Segments);
+
+public readonly record struct StateLaneLayout(
+    string Label,
+    string TotalLabel,
+    IReadOnlyList<SegmentLayout> Segments);
+
+public readonly record struct LegendItemLayout(
+    string Label,
+    string ColorHex);

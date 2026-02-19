@@ -23,8 +23,6 @@ public sealed partial class MainWindow : Window
     private const int CompactTickSwitchWidth = 1360;
     private const double TickOffsetBase = 100.0;
     private const double TickOffsetMax = 100.0;
-    private const string NoDataTooltip = "No data";
-    private static readonly string[] AppStates = ["Active", "Open", "Minimized"];
     private static readonly SolidColorBrush RefreshButtonNormalBrush = CreateBrush("#BFA8FF");
     private static readonly SolidColorBrush RefreshButtonHoverBrush = CreateBrush("#A892F2");
     private static readonly SolidColorBrush RefreshButtonPressedBrush = CreateBrush("#967EE8");
@@ -38,6 +36,7 @@ public sealed partial class MainWindow : Window
     private readonly ObservableCollection<string> _appNames = [];
     private readonly ObservableCollection<LegendItemViewModel> _overviewLegendItems = [];
     private readonly ObservableCollection<LegendItemViewModel> _appLegendItems = [];
+    private readonly TimelineLayoutBuilder _layoutBuilder = new(topAppCount: TopAppCount);
 
     private IReadOnlyList<TimelineUsageRow> _timelineRows = [];
     private UsageQueryWindow _currentWindow = CreateLocalDay24hWindow();
@@ -306,114 +305,29 @@ public sealed partial class MainWindow : Window
     private void BuildDailyOverviewLanes()
     {
         _overviewDailyLanes.Clear();
+        IReadOnlyList<StateLaneLayout> lanes = _layoutBuilder.BuildDailyOverviewLanes(
+            _timelineRows,
+            _currentWindow,
+            DailyTrackWidth);
 
-        double hourWidth = DailyTrackWidth / 24.0;
-        DateTimeOffset fromUtc = _currentWindow.FromUtc;
-
-        foreach (string state in AppStates)
+        foreach (StateLaneLayout lane in lanes)
         {
-            var segments = new List<AbsoluteSegmentViewModel>();
-            double laneTotalSeconds = 0;
-
-            var byHour = _timelineRows
-                .Where(x => string.Equals(x.State, state, StringComparison.OrdinalIgnoreCase))
-                .Select(x => new
-                {
-                    HourIndex = (int)Math.Floor((x.BucketStartUtc - fromUtc).TotalHours),
-                    x.ExeName,
-                    x.Seconds
-                })
-                .Where(x => x.HourIndex >= 0 && x.HourIndex < 24)
-                .GroupBy(x => x.HourIndex)
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.GroupBy(v => v.ExeName, StringComparer.OrdinalIgnoreCase)
-                        .ToDictionary(v => v.Key, v => v.Sum(t => t.Seconds), StringComparer.OrdinalIgnoreCase));
-
-            for (int hour = 0; hour < 24; hour++)
-            {
-                DateTimeOffset bucketStart = _currentWindow.FromUtc.AddHours(hour);
-                DateTimeOffset bucketEnd = bucketStart.AddHours(1);
-
-                if (!byHour.TryGetValue(hour, out Dictionary<string, double>? byApp))
-                {
-                    AddNoDataAbsoluteSegment(segments, hourWidth);
-                    continue;
-                }
-
-                var normalizedByApp = byApp
-                    .ToDictionary(
-                        x => x.Key,
-                        x => Math.Min((double)_currentWindow.BucketSeconds, x.Value),
-                        StringComparer.OrdinalIgnoreCase);
-
-                double rawHourSeconds = normalizedByApp.Values.Sum();
-                double occupiedSeconds = Math.Min((double)_currentWindow.BucketSeconds, rawHourSeconds);
-                laneTotalSeconds += occupiedSeconds;
-
-                if (occupiedSeconds <= 0)
-                {
-                    AddNoDataAbsoluteSegment(segments, hourWidth);
-                    continue;
-                }
-
-                double scale = rawHourSeconds > 0 ? occupiedSeconds / rawHourSeconds : 0;
-                double occupiedWidth = 0;
-
-                foreach ((string exeName, double seconds) in normalizedByApp
-                             .OrderByDescending(x => x.Value)
-                             .ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
-                {
-                    if (seconds <= 0)
-                    {
-                        continue;
-                    }
-
-                    double width = hourWidth * (seconds / _currentWindow.BucketSeconds) * scale;
-                    if (width <= 0)
-                    {
-                        continue;
-                    }
-
-                    DateTimeOffset localStart = bucketStart.ToLocalTime();
-                    DateTimeOffset localEnd = bucketEnd.ToLocalTime();
-                    segments.Add(new AbsoluteSegmentViewModel(
-                        width,
-                        CreateBrush(ColorForApp(exeName)),
-                        $"{state} | {exeName} | {localStart:HH\\:mm}-{localEnd:HH\\:mm} | {ToDuration(seconds)}"));
-                    occupiedWidth += width;
-                }
-
-                double gapWidth = Math.Max(0, hourWidth - occupiedWidth);
-                if (gapWidth > 0)
-                {
-                    AddNoDataAbsoluteSegment(segments, gapWidth);
-                }
-            }
-
             _overviewDailyLanes.Add(new StateLaneViewModel(
-                state,
-                ToDuration(laneTotalSeconds),
-                segments));
+                lane.Label,
+                lane.TotalLabel,
+                lane.Segments.Select(ToAbsoluteSegmentViewModel).ToList()));
         }
     }
 
     private void RebuildAppNames()
     {
         string? current = AppComboBox.SelectedItem as string;
-
-        var totals = _timelineRows
-            .GroupBy(r => r.ExeName, StringComparer.OrdinalIgnoreCase)
-            .Select(g => new { ExeName = g.Key, Seconds = g.Sum(x => x.Seconds) })
-            .Where(x => x.Seconds > 0)
-            .OrderByDescending(x => x.Seconds)
-            .ThenBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        IReadOnlyList<string> appNames = _layoutBuilder.BuildAppNames(_timelineRows);
 
         _appNames.Clear();
-        foreach (var app in totals)
+        foreach (string app in appNames)
         {
-            _appNames.Add(app.ExeName);
+            _appNames.Add(app);
         }
 
         if (_appNames.Count == 0)
@@ -434,146 +348,41 @@ public sealed partial class MainWindow : Window
     private void RebuildOverviewLegend()
     {
         _overviewLegendItems.Clear();
-
-        var apps = _timelineRows
-            .GroupBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
-            .Select(g => new { ExeName = g.Key, Seconds = g.Sum(x => x.Seconds) })
-            .Where(x => x.Seconds > 0)
-            .OrderByDescending(x => x.Seconds)
-            .ThenBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var top = apps.Take(TopAppCount);
-
-        foreach (var app in top)
+        IReadOnlyList<LegendItemLayout> legendItems = _layoutBuilder.BuildOverviewLegend(_timelineRows);
+        foreach (LegendItemLayout item in legendItems)
         {
             _overviewLegendItems.Add(new LegendItemViewModel(
-                CreateBrush(ColorForKey(app.ExeName)),
-                app.ExeName));
-        }
-
-        if (apps.Count > TopAppCount)
-        {
-            _overviewLegendItems.Add(new LegendItemViewModel(
-                CreateBrush("#F8B5B5"),
-                "Other"));
+                CreateBrush(item.ColorHex),
+                item.Label));
         }
     }
 
     private void RebuildAppLegend()
     {
         _appLegendItems.Clear();
-        _appLegendItems.Add(new LegendItemViewModel(
-            CreateBrush("#BFA8FF"),
-            "Active"));
-        _appLegendItems.Add(new LegendItemViewModel(
-            CreateBrush("#B8E9C7"),
-            "Open"));
-        _appLegendItems.Add(new LegendItemViewModel(
-            CreateBrush("#F9E6A6"),
-            "Minimized"));
+        IReadOnlyList<LegendItemLayout> legendItems = _layoutBuilder.BuildAppLegend();
+        foreach (LegendItemLayout item in legendItems)
+        {
+            _appLegendItems.Add(new LegendItemViewModel(
+                CreateBrush(item.ColorHex),
+                item.Label));
+        }
     }
 
     private void BuildOverviewRows()
     {
         _overviewRows.Clear();
+        IReadOnlyList<TimelineRowLayout> rows = _layoutBuilder.BuildOverviewRows(
+            _timelineRows,
+            _currentWindow,
+            BucketTrackWidth);
 
-        var totalByApp = _timelineRows
-            .GroupBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.Sum(x => x.Seconds), StringComparer.OrdinalIgnoreCase);
-
-        HashSet<string> topApps = totalByApp
-            .OrderByDescending(x => x.Value)
-            .ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
-            .Take(TopAppCount)
-            .Select(x => x.Key)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        foreach (DateTimeOffset dayStart in EnumerateDayBuckets(_currentWindow))
+        foreach (TimelineRowLayout row in rows)
         {
-            DateTimeOffset dayEnd = dayStart.AddDays(1);
-            var segments = new List<TimelineSegmentViewModel>();
-            double dayTotalSeconds = 0;
-            double hourWidth = BucketTrackWidth / 24.0;
-
-            for (int hour = 0; hour < 24; hour++)
-            {
-                DateTimeOffset hourStart = dayStart.AddHours(hour);
-                var hourRows = _timelineRows
-                    .Where(x => x.BucketStartUtc == hourStart)
-                    .ToList();
-
-                if (hourRows.Count == 0)
-                {
-                    AddNoDataTimelineSegment(segments, hourWidth);
-                    continue;
-                }
-
-                var byApp = hourRows
-                    .GroupBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
-                    .ToDictionary(
-                        g => g.Key,
-                        g => Math.Min((double)_currentWindow.BucketSeconds, g.Sum(v => v.Seconds)),
-                        StringComparer.OrdinalIgnoreCase);
-
-                double otherSeconds = byApp
-                    .Where(x => !topApps.Contains(x.Key))
-                    .Sum(x => x.Value);
-
-                var displayByApp = byApp
-                    .Where(x => topApps.Contains(x.Key))
-                    .ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
-
-                if (otherSeconds > 0)
-                {
-                    displayByApp["Other"] = Math.Min((double)_currentWindow.BucketSeconds, otherSeconds);
-                }
-
-                double rawHourSeconds = displayByApp.Values.Sum();
-                double occupiedSeconds = Math.Min((double)_currentWindow.BucketSeconds, rawHourSeconds);
-                dayTotalSeconds += occupiedSeconds;
-
-                if (occupiedSeconds <= 0)
-                {
-                    AddNoDataTimelineSegment(segments, hourWidth);
-                    continue;
-                }
-
-                double scale = rawHourSeconds > 0 ? occupiedSeconds / rawHourSeconds : 0;
-                double occupiedWidth = 0;
-
-                foreach ((string app, double seconds) in displayByApp
-                             .OrderByDescending(x => x.Value)
-                             .ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
-                {
-                    double width = hourWidth * (seconds / _currentWindow.BucketSeconds) * scale;
-                    if (width <= 0)
-                    {
-                        continue;
-                    }
-
-                    Brush fill = string.Equals(app, "Other", StringComparison.OrdinalIgnoreCase)
-                        ? CreateBrush("#F8B5B5")
-                        : CreateBrush(ColorForKey(app));
-
-                    segments.Add(new TimelineSegmentViewModel(
-                        width,
-                        fill,
-                        $"{app} {ToDuration(seconds)} ({seconds:F0}s)"));
-                    occupiedWidth += width;
-                }
-
-                double gapWidth = Math.Max(0, hourWidth - occupiedWidth);
-                if (gapWidth > 0)
-                {
-                    AddNoDataTimelineSegment(segments, gapWidth);
-                }
-            }
-
             _overviewRows.Add(new TimelineRowViewModel(
-                FormatBucketLabel(dayStart, dayEnd),
-                ToDuration(dayTotalSeconds),
-                segments));
+                row.BucketLabel,
+                row.TotalLabel,
+                row.Segments.Select(ToTimelineSegmentViewModel).ToList()));
         }
     }
 
@@ -586,65 +395,18 @@ public sealed partial class MainWindow : Window
         {
             return;
         }
+        IReadOnlyList<TimelineRowLayout> rows = _layoutBuilder.BuildAppTimelineRows(
+            _timelineRows,
+            _currentWindow,
+            app,
+            BucketTrackWidth);
 
-        foreach (DateTimeOffset dayStart in EnumerateDayBuckets(_currentWindow))
+        foreach (TimelineRowLayout row in rows)
         {
-            DateTimeOffset dayEnd = dayStart.AddDays(1);
-            var segments = new List<TimelineSegmentViewModel>();
-            double dayTotalSeconds = 0;
-            double hourWidth = BucketTrackWidth / 24.0;
-
-            for (int hour = 0; hour < 24; hour++)
-            {
-                DateTimeOffset hourStart = dayStart.AddHours(hour);
-                var hourRows = _timelineRows
-                    .Where(x => x.BucketStartUtc == hourStart && string.Equals(x.ExeName, app, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-
-                if (hourRows.Count == 0)
-                {
-                    AddNoDataTimelineSegment(segments, hourWidth);
-                    continue;
-                }
-
-                var byState = hourRows
-                    .GroupBy(x => x.State, StringComparer.OrdinalIgnoreCase)
-                    .ToDictionary(
-                        g => g.Key,
-                        g => Math.Min((double)_currentWindow.BucketSeconds, g.Sum(v => v.Seconds)),
-                        StringComparer.OrdinalIgnoreCase);
-
-                double activeSeconds = byState.GetValueOrDefault("Active", 0);
-                double openSeconds = byState.GetValueOrDefault("Open", 0);
-                double minimizedSeconds = byState.GetValueOrDefault("Minimized", 0);
-                double rawHourSeconds = activeSeconds + openSeconds + minimizedSeconds;
-                double occupiedSeconds = Math.Min((double)_currentWindow.BucketSeconds, rawHourSeconds);
-                dayTotalSeconds += occupiedSeconds;
-
-                if (occupiedSeconds <= 0)
-                {
-                    AddNoDataTimelineSegment(segments, hourWidth);
-                    continue;
-                }
-
-                double scale = rawHourSeconds > 0 ? occupiedSeconds / rawHourSeconds : 0;
-                double occupiedWidth = 0;
-
-                occupiedWidth += AddStateSegmentWeek(segments, "Active", activeSeconds, _currentWindow.BucketSeconds, "#BFA8FF", hourWidth, scale);
-                occupiedWidth += AddStateSegmentWeek(segments, "Open", openSeconds, _currentWindow.BucketSeconds, "#B8E9C7", hourWidth, scale);
-                occupiedWidth += AddStateSegmentWeek(segments, "Minimized", minimizedSeconds, _currentWindow.BucketSeconds, "#F9E6A6", hourWidth, scale);
-
-                double gapWidth = Math.Max(0, hourWidth - occupiedWidth);
-                if (gapWidth > 0)
-                {
-                    AddNoDataTimelineSegment(segments, gapWidth);
-                }
-            }
-
             _appRows.Add(new TimelineRowViewModel(
-                FormatBucketLabel(dayStart, dayEnd),
-                ToDuration(dayTotalSeconds),
-                segments));
+                row.BucketLabel,
+                row.TotalLabel,
+                row.Segments.Select(ToTimelineSegmentViewModel).ToList()));
         }
     }
 
@@ -656,146 +418,31 @@ public sealed partial class MainWindow : Window
         {
             return;
         }
+        IReadOnlyList<StateLaneLayout> lanes = _layoutBuilder.BuildAppDailyLanes(
+            _timelineRows,
+            _currentWindow,
+            app,
+            DailyTrackWidth);
 
-        double hourWidth = DailyTrackWidth / 24.0;
-        DateTimeOffset fromUtc = _currentWindow.FromUtc;
-
-        foreach (string state in AppStates)
+        foreach (StateLaneLayout lane in lanes)
         {
-            var segments = new List<AbsoluteSegmentViewModel>();
-            double laneTotalSeconds = 0;
-
-            var byHour = _timelineRows
-                .Where(x =>
-                    string.Equals(x.ExeName, app, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(x.State, state, StringComparison.OrdinalIgnoreCase))
-                .Select(x => new
-                {
-                    HourIndex = (int)Math.Floor((x.BucketStartUtc - fromUtc).TotalHours),
-                    x.Seconds
-                })
-                .Where(x => x.HourIndex >= 0 && x.HourIndex < 24)
-                .GroupBy(x => x.HourIndex)
-                .ToDictionary(g => g.Key, g => g.Sum(v => v.Seconds));
-
-            for (int hour = 0; hour < 24; hour++)
-            {
-                DateTimeOffset bucketStart = _currentWindow.FromUtc.AddHours(hour);
-                DateTimeOffset bucketEnd = bucketStart.AddHours(1);
-
-                if (!byHour.TryGetValue(hour, out double seconds))
-                {
-                    AddNoDataAbsoluteSegment(segments, hourWidth);
-                    continue;
-                }
-
-                double occupiedSeconds = Math.Min((double)_currentWindow.BucketSeconds, seconds);
-                laneTotalSeconds += occupiedSeconds;
-                if (occupiedSeconds <= 0)
-                {
-                    AddNoDataAbsoluteSegment(segments, hourWidth);
-                    continue;
-                }
-
-                double width = hourWidth * (occupiedSeconds / _currentWindow.BucketSeconds);
-                width = Math.Min(hourWidth, width);
-                if (width <= 0)
-                {
-                    AddNoDataAbsoluteSegment(segments, hourWidth);
-                    continue;
-                }
-
-                DateTimeOffset localStart = bucketStart.ToLocalTime();
-                DateTimeOffset localEnd = bucketEnd.ToLocalTime();
-                segments.Add(new AbsoluteSegmentViewModel(
-                    width,
-                    CreateBrush(ColorForApp(app)),
-                    $"{state} | {app} | {localStart:HH\\:mm}-{localEnd:HH\\:mm} | {ToDuration(occupiedSeconds)}"));
-
-                double gapWidth = Math.Max(0, hourWidth - width);
-                if (gapWidth > 0)
-                {
-                    AddNoDataAbsoluteSegment(segments, gapWidth);
-                }
-            }
-
             _appDailyLanes.Add(new StateLaneViewModel(
-                state,
-                ToDuration(laneTotalSeconds),
-                segments));
+                lane.Label,
+                lane.TotalLabel,
+                lane.Segments.Select(ToAbsoluteSegmentViewModel).ToList()));
         }
     }
 
-    private static void AddNoDataTimelineSegment(ICollection<TimelineSegmentViewModel> segments, double width)
+    private static TimelineSegmentViewModel ToTimelineSegmentViewModel(SegmentLayout segment)
     {
-        segments.Add(new TimelineSegmentViewModel(
-            width,
-            TransparentBrush,
-            NoDataTooltip));
+        Brush fill = segment.IsNoData ? TransparentBrush : CreateBrush(segment.ColorHex);
+        return new TimelineSegmentViewModel(segment.Width, fill, segment.Tooltip);
     }
 
-    private static void AddNoDataAbsoluteSegment(ICollection<AbsoluteSegmentViewModel> segments, double width)
+    private static AbsoluteSegmentViewModel ToAbsoluteSegmentViewModel(SegmentLayout segment)
     {
-        segments.Add(new AbsoluteSegmentViewModel(
-            width,
-            TransparentBrush,
-            NoDataTooltip));
-    }
-
-    private static double AddStateSegmentWeek(
-        ICollection<TimelineSegmentViewModel> segments,
-        string state,
-        double seconds,
-        int bucketSeconds,
-        string colorHex,
-        double hourWidth,
-        double scale)
-    {
-        if (seconds <= 0 || bucketSeconds <= 0 || hourWidth <= 0 || scale <= 0)
-        {
-            return 0;
-        }
-
-        double width = hourWidth * (seconds / bucketSeconds) * scale;
-        if (width <= 0)
-        {
-            return 0;
-        }
-
-        segments.Add(new TimelineSegmentViewModel(
-            width,
-            CreateBrush(colorHex),
-            $"{state} {ToDuration(seconds)} ({seconds:F0}s)"));
-        return width;
-    }
-
-    private static string FormatBucketLabel(DateTimeOffset bucketStartUtc, DateTimeOffset bucketEndUtc)
-    {
-        DateTimeOffset localStart = bucketStartUtc.ToLocalTime();
-        DateTimeOffset localEnd = bucketEndUtc.ToLocalTime();
-        TimeSpan bucket = bucketEndUtc - bucketStartUtc;
-        if (bucket >= TimeSpan.FromHours(23))
-        {
-            return $"{localStart:MM/dd (ddd)}";
-        }
-
-        return $"{localStart:MM/dd HH:mm} - {localEnd:HH:mm}";
-    }
-
-    private static IEnumerable<DateTimeOffset> EnumerateDayBuckets(UsageQueryWindow window)
-    {
-        DateTimeOffset cursor = window.FromUtc;
-        while (cursor < window.ToUtc)
-        {
-            yield return cursor;
-            cursor = cursor.AddDays(1);
-        }
-    }
-
-    private static string ToDuration(double seconds)
-    {
-        TimeSpan span = TimeSpan.FromSeconds(Math.Max(0, Math.Round(seconds)));
-        return $"{(int)span.TotalHours:D2}:{span.Minutes:D2}";
+        Brush fill = segment.IsNoData ? TransparentBrush : CreateBrush(segment.ColorHex);
+        return new AbsoluteSegmentViewModel(segment.Width, fill, segment.Tooltip);
     }
 
     private static SolidColorBrush CreateBrush(string hex)
@@ -809,94 +456,6 @@ public sealed partial class MainWindow : Window
         byte g = Convert.ToByte(hex.Substring(3, 2), 16);
         byte b = Convert.ToByte(hex.Substring(5, 2), 16);
         return new SolidColorBrush(Windows.UI.Color.FromArgb(255, r, g, b));
-    }
-
-    private static string ColorForApp(string appKey)
-    {
-        return ColorForKey(appKey);
-    }
-
-    private static string ColorForKey(string key)
-    {
-        uint hash = ComputeStableHash(key);
-        int hue = HashToHue(key);
-        // Spread colors across hue/saturation/lightness to reduce collisions between app colors.
-        double saturation = 0.46 + (((hash >> 8) % 15) / 100.0); // 0.46 - 0.60
-        double lightness = 0.56 + (((hash >> 16) % 11) / 100.0); // 0.56 - 0.66
-        (byte r, byte g, byte b) = HslToRgb(hue / 360.0, saturation, lightness);
-        return $"#{r:X2}{g:X2}{b:X2}";
-    }
-
-    private static int HashToHue(string key)
-    {
-        uint hash = ComputeStableHash(key);
-        // Full 360-degree hue distribution instead of 4-color palette.
-        return (int)(hash % 360);
-    }
-
-    private static uint ComputeStableHash(string key)
-    {
-        uint hash = 2166136261;
-        foreach (char c in key.ToLowerInvariant())
-        {
-            hash ^= c;
-            hash *= 16777619;
-        }
-
-        return hash;
-    }
-
-    private static (byte R, byte G, byte B) HslToRgb(double h, double s, double l)
-    {
-        double c = (1 - Math.Abs(2 * l - 1)) * s;
-        double x = c * (1 - Math.Abs((h * 6) % 2 - 1));
-        double m = l - c / 2;
-
-        double r1;
-        double g1;
-        double b1;
-
-        if (h < 1.0 / 6.0)
-        {
-            r1 = c;
-            g1 = x;
-            b1 = 0d;
-        }
-        else if (h < 2.0 / 6.0)
-        {
-            r1 = x;
-            g1 = c;
-            b1 = 0d;
-        }
-        else if (h < 3.0 / 6.0)
-        {
-            r1 = 0d;
-            g1 = c;
-            b1 = x;
-        }
-        else if (h < 4.0 / 6.0)
-        {
-            r1 = 0d;
-            g1 = x;
-            b1 = c;
-        }
-        else if (h < 5.0 / 6.0)
-        {
-            r1 = x;
-            g1 = 0d;
-            b1 = c;
-        }
-        else
-        {
-            r1 = c;
-            g1 = 0d;
-            b1 = x;
-        }
-
-        byte r = (byte)Math.Round((r1 + m) * 255);
-        byte g = (byte)Math.Round((g1 + m) * 255);
-        byte b = (byte)Math.Round((b1 + m) * 255);
-        return (r, g, b);
     }
 
     private void ClearRows()
