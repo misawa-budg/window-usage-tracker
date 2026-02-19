@@ -31,6 +31,9 @@ dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- seed 
 dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- report 24h
 ```
 
+注:
+- `seed` で投入される `source=demo-seed` データは、Viewer表示では除外されます。
+
 ## テスト
 ```powershell
 dotnet test .\WinTracker.Collector.Tests\WinTracker.Collector.Tests.csproj
