@@ -62,3 +62,15 @@ public sealed class AbsoluteSegmentViewModel
     public Brush Fill { get; }
     public string Tooltip { get; }
 }
+
+public sealed class LegendItemViewModel
+{
+    public LegendItemViewModel(Brush fill, string label)
+    {
+        Fill = fill;
+        Label = label;
+    }
+
+    public Brush Fill { get; }
+    public string Label { get; }
+}

@@ -26,12 +26,16 @@ public sealed partial class MainWindow : Window
     private static readonly SolidColorBrush RefreshButtonNormalBrush = CreateBrush("#BFA8FF");
     private static readonly SolidColorBrush RefreshButtonHoverBrush = CreateBrush("#A892F2");
     private static readonly SolidColorBrush RefreshButtonPressedBrush = CreateBrush("#967EE8");
+    private static readonly SolidColorBrush TransparentBrush =
+        new(Windows.UI.Color.FromArgb(0, 0, 0, 0));
 
     private readonly ObservableCollection<TimelineRowViewModel> _overviewRows = [];
     private readonly ObservableCollection<StateLaneViewModel> _overviewDailyLanes = [];
     private readonly ObservableCollection<StateLaneViewModel> _appDailyLanes = [];
     private readonly ObservableCollection<TimelineRowViewModel> _appRows = [];
     private readonly ObservableCollection<string> _appNames = [];
+    private readonly ObservableCollection<LegendItemViewModel> _overviewLegendItems = [];
+    private readonly ObservableCollection<LegendItemViewModel> _appLegendItems = [];
 
     private IReadOnlyList<TimelineUsageRow> _timelineRows = [];
     private UsageQueryWindow _currentWindow = CreateLocalDay24hWindow();
@@ -50,6 +54,8 @@ public sealed partial class MainWindow : Window
         AppDailyListView.ItemsSource = _appDailyLanes;
         AppTimelineListView.ItemsSource = _appRows;
         AppComboBox.ItemsSource = _appNames;
+        OverviewLegendItemsControl.ItemsSource = _overviewLegendItems;
+        AppLegendItemsControl.ItemsSource = _appLegendItems;
 
         _isInitialized = true;
         _ = ReloadAsync();
@@ -102,6 +108,18 @@ public sealed partial class MainWindow : Window
         AppTick18TextBlock.Text = compact ? "18" : "18:00";
         AppTick24TextBlock.Text = compact ? "24" : "24:00";
 
+        WeekTick00TextBlock.Text = compact ? "0" : "00:00";
+        WeekTick06TextBlock.Text = compact ? "6" : "06:00";
+        WeekTick12TextBlock.Text = compact ? "12" : "12:00";
+        WeekTick18TextBlock.Text = compact ? "18" : "18:00";
+        WeekTick24TextBlock.Text = compact ? "24" : "24:00";
+
+        AppWeekTick00TextBlock.Text = compact ? "0" : "00:00";
+        AppWeekTick06TextBlock.Text = compact ? "6" : "06:00";
+        AppWeekTick12TextBlock.Text = compact ? "12" : "12:00";
+        AppWeekTick18TextBlock.Text = compact ? "18" : "18:00";
+        AppWeekTick24TextBlock.Text = compact ? "24" : "24:00";
+
         UpdateTickOffsets();
     }
 
@@ -113,6 +131,10 @@ public sealed partial class MainWindow : Window
         Tick18TextBlock.Margin = new Thickness(offset, 0, 0, 0);
         AppTick06TextBlock.Margin = new Thickness(-offset, 0, 0, 0);
         AppTick18TextBlock.Margin = new Thickness(offset, 0, 0, 0);
+        WeekTick06TextBlock.Margin = new Thickness(-offset, 0, 0, 0);
+        WeekTick18TextBlock.Margin = new Thickness(offset, 0, 0, 0);
+        AppWeekTick06TextBlock.Margin = new Thickness(-offset, 0, 0, 0);
+        AppWeekTick18TextBlock.Margin = new Thickness(offset, 0, 0, 0);
     }
 
     private async void OnRefreshClicked(object sender, RoutedEventArgs e)
@@ -132,6 +154,8 @@ public sealed partial class MainWindow : Window
 
     private void OnAppSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        RebuildAppLegend();
+
         if (GetRangeLabel() == "24h")
         {
             BuildAppDailyLanes();
@@ -181,6 +205,8 @@ public sealed partial class MainWindow : Window
             }
 
             RebuildAppNames();
+            RebuildOverviewLegend();
+            RebuildAppLegend();
             if (GetRangeLabel() == "24h")
             {
                 BuildAppDailyLanes();
@@ -209,6 +235,7 @@ public sealed partial class MainWindow : Window
     private void SetOverviewMode(bool isDaily24h)
     {
         OverviewDailyPanel.Visibility = isDaily24h ? Visibility.Visible : Visibility.Collapsed;
+        OverviewWeekHeader.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
         OverviewListView.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
 
         if (isDaily24h)
@@ -224,6 +251,7 @@ public sealed partial class MainWindow : Window
     private void SetAppMode(bool isDaily24h)
     {
         AppDailyPanel.Visibility = isDaily24h ? Visibility.Visible : Visibility.Collapsed;
+        AppWeekHeader.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
         AppTimelineListView.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
 
         if (isDaily24h)
@@ -264,7 +292,7 @@ public sealed partial class MainWindow : Window
         return new UsageQueryWindow(
             fromLocal.ToUniversalTime(),
             toLocal.ToUniversalTime(),
-            TimeSpan.FromDays(1));
+            TimeSpan.FromHours(1));
     }
 
     private static string ResolveDatabasePath()
@@ -281,37 +309,67 @@ public sealed partial class MainWindow : Window
 
         string[] states = ["Active", "Open", "Minimized"];
         double hourWidth = DailyTrackWidth / 24.0;
+        DateTimeOffset fromUtc = _currentWindow.FromUtc;
 
         foreach (string state in states)
         {
             var segments = new List<AbsoluteSegmentViewModel>();
             double laneTotalSeconds = 0;
 
+            var byHour = _timelineRows
+                .Where(x => string.Equals(x.State, state, StringComparison.OrdinalIgnoreCase))
+                .Select(x => new
+                {
+                    HourIndex = (int)Math.Floor((x.BucketStartUtc - fromUtc).TotalHours),
+                    x.ExeName,
+                    x.Seconds
+                })
+                .Where(x => x.HourIndex >= 0 && x.HourIndex < 24)
+                .GroupBy(x => x.HourIndex)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.GroupBy(v => v.ExeName, StringComparer.OrdinalIgnoreCase)
+                        .ToDictionary(v => v.Key, v => v.Sum(t => t.Seconds), StringComparer.OrdinalIgnoreCase));
+
             for (int hour = 0; hour < 24; hour++)
             {
                 DateTimeOffset bucketStart = _currentWindow.FromUtc.AddHours(hour);
                 DateTimeOffset bucketEnd = bucketStart.AddHours(1);
 
-                Dictionary<string, double> byApp = _timelineRows
-                    .Where(x =>
-                        string.Equals(x.State, state, StringComparison.OrdinalIgnoreCase) &&
-                        x.BucketStartUtc == bucketStart)
-                    .GroupBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
-                    .ToDictionary(g => g.Key, g => g.Sum(v => v.Seconds), StringComparer.OrdinalIgnoreCase);
-
-                double bucketTotalSeconds = byApp.Values.Sum();
-                laneTotalSeconds += bucketTotalSeconds;
-
-                if (bucketTotalSeconds <= 0)
+                if (!byHour.TryGetValue(hour, out Dictionary<string, double>? byApp))
                 {
+                    segments.Add(new AbsoluteSegmentViewModel(
+                        0,
+                        hourWidth,
+                        TransparentBrush,
+                        "No data"));
                     continue;
                 }
 
-                double bucketStartX = hour * hourWidth;
-                double cursorX = bucketStartX;
-                double bucketEndX = bucketStartX + hourWidth;
+                var normalizedByApp = byApp
+                    .ToDictionary(
+                        x => x.Key,
+                        x => Math.Min((double)_currentWindow.BucketSeconds, x.Value),
+                        StringComparer.OrdinalIgnoreCase);
 
-                foreach ((string exeName, double seconds) in byApp
+                double rawHourSeconds = normalizedByApp.Values.Sum();
+                double occupiedSeconds = Math.Min((double)_currentWindow.BucketSeconds, rawHourSeconds);
+                laneTotalSeconds += occupiedSeconds;
+
+                if (occupiedSeconds <= 0)
+                {
+                    segments.Add(new AbsoluteSegmentViewModel(
+                        0,
+                        hourWidth,
+                        TransparentBrush,
+                        "No data"));
+                    continue;
+                }
+
+                double scale = rawHourSeconds > 0 ? occupiedSeconds / rawHourSeconds : 0;
+                double occupiedWidth = 0;
+
+                foreach ((string exeName, double seconds) in normalizedByApp
                              .OrderByDescending(x => x.Value)
                              .ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
                 {
@@ -320,28 +378,30 @@ public sealed partial class MainWindow : Window
                         continue;
                     }
 
-                    double width = hourWidth * (seconds / bucketTotalSeconds);
+                    double width = hourWidth * (seconds / _currentWindow.BucketSeconds) * scale;
                     if (width <= 0)
                     {
                         continue;
                     }
 
-                    // keep each hour's fragments within its hour cell
-                    double clampedWidth = Math.Min(width, bucketEndX - cursorX);
-                    if (clampedWidth <= 0)
-                    {
-                        break;
-                    }
-
                     DateTimeOffset localStart = bucketStart.ToLocalTime();
                     DateTimeOffset localEnd = bucketEnd.ToLocalTime();
                     segments.Add(new AbsoluteSegmentViewModel(
-                        cursorX,
-                        clampedWidth,
+                        0,
+                        width,
                         CreateBrush(ColorForAppState(exeName, state)),
                         $"{state} | {exeName} | {localStart:HH\\:mm}-{localEnd:HH\\:mm} | {ToDuration(seconds)}"));
+                    occupiedWidth += width;
+                }
 
-                    cursorX += clampedWidth;
+                double gapWidth = Math.Max(0, hourWidth - occupiedWidth);
+                if (gapWidth > 0)
+                {
+                    segments.Add(new AbsoluteSegmentViewModel(
+                        0,
+                        gapWidth,
+                        TransparentBrush,
+                        "No data"));
                 }
             }
 
@@ -385,6 +445,49 @@ public sealed partial class MainWindow : Window
         AppComboBox.SelectedIndex = 0;
     }
 
+    private void RebuildOverviewLegend()
+    {
+        _overviewLegendItems.Clear();
+
+        var apps = _timelineRows
+            .GroupBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new { ExeName = g.Key, Seconds = g.Sum(x => x.Seconds) })
+            .Where(x => x.Seconds > 0)
+            .OrderByDescending(x => x.Seconds)
+            .ThenBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var top = apps.Take(TopAppCount);
+
+        foreach (var app in top)
+        {
+            _overviewLegendItems.Add(new LegendItemViewModel(
+                CreateBrush(ColorForKey(app.ExeName)),
+                app.ExeName));
+        }
+
+        if (apps.Count > TopAppCount)
+        {
+            _overviewLegendItems.Add(new LegendItemViewModel(
+                CreateBrush("#F8B5B5"),
+                "Other"));
+        }
+    }
+
+    private void RebuildAppLegend()
+    {
+        _appLegendItems.Clear();
+        _appLegendItems.Add(new LegendItemViewModel(
+            CreateBrush("#BFA8FF"),
+            "Active"));
+        _appLegendItems.Add(new LegendItemViewModel(
+            CreateBrush("#B8E9C7"),
+            "Open"));
+        _appLegendItems.Add(new LegendItemViewModel(
+            CreateBrush("#F9E6A6"),
+            "Minimized"));
+    }
+
     private void BuildOverviewRows()
     {
         _overviewRows.Clear();
@@ -400,47 +503,99 @@ public sealed partial class MainWindow : Window
             .Select(x => x.Key)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        foreach (DateTimeOffset bucketStart in EnumerateBuckets(_currentWindow))
+        foreach (DateTimeOffset dayStart in EnumerateDayBuckets(_currentWindow))
         {
-            DateTimeOffset bucketEnd = bucketStart + _currentWindow.BucketSize;
-
-            var bucketRows = _timelineRows
-                .Where(x => x.BucketStartUtc == bucketStart)
-                .GroupBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.Sum(v => v.Seconds), StringComparer.OrdinalIgnoreCase);
-
-            double bucketTotalSeconds = bucketRows.Values.Sum();
+            DateTimeOffset dayEnd = dayStart.AddDays(1);
             var segments = new List<TimelineSegmentViewModel>();
+            double dayTotalSeconds = 0;
+            double hourWidth = BucketTrackWidth / 24.0;
 
-            foreach (string app in topApps.OrderByDescending(x => totalByApp[x]).ThenBy(x => x, StringComparer.OrdinalIgnoreCase))
+            for (int hour = 0; hour < 24; hour++)
             {
-                if (!bucketRows.TryGetValue(app, out double seconds) || seconds <= 0)
+                DateTimeOffset hourStart = dayStart.AddHours(hour);
+                var hourRows = _timelineRows
+                    .Where(x => x.BucketStartUtc == hourStart)
+                    .ToList();
+
+                if (hourRows.Count == 0)
                 {
+                    segments.Add(new TimelineSegmentViewModel(
+                        hourWidth,
+                        TransparentBrush,
+                        "No data"));
                     continue;
                 }
 
-                double width = CalculateShareWidth(seconds, bucketTotalSeconds, BucketTrackWidth);
-                segments.Add(new TimelineSegmentViewModel(
-                    width,
-                    CreateBrush(ColorForKey(app)),
-                    $"{app} {ToDuration(seconds)} ({seconds:F0}s)"));
-            }
+                var byApp = hourRows
+                    .GroupBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => Math.Min((double)_currentWindow.BucketSeconds, g.Sum(v => v.Seconds)),
+                        StringComparer.OrdinalIgnoreCase);
 
-            double otherSeconds = bucketRows
-                .Where(x => !topApps.Contains(x.Key))
-                .Sum(x => x.Value);
+                double otherSeconds = byApp
+                    .Where(x => !topApps.Contains(x.Key))
+                    .Sum(x => x.Value);
 
-            if (otherSeconds > 0)
-            {
-                segments.Add(new TimelineSegmentViewModel(
-                    CalculateShareWidth(otherSeconds, bucketTotalSeconds, BucketTrackWidth),
-                    CreateBrush("#F8B5B5"),
-                    $"Other {ToDuration(otherSeconds)} ({otherSeconds:F0}s)"));
+                var displayByApp = byApp
+                    .Where(x => topApps.Contains(x.Key))
+                    .ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
+
+                if (otherSeconds > 0)
+                {
+                    displayByApp["Other"] = Math.Min((double)_currentWindow.BucketSeconds, otherSeconds);
+                }
+
+                double rawHourSeconds = displayByApp.Values.Sum();
+                double occupiedSeconds = Math.Min((double)_currentWindow.BucketSeconds, rawHourSeconds);
+                dayTotalSeconds += occupiedSeconds;
+
+                if (occupiedSeconds <= 0)
+                {
+                    segments.Add(new TimelineSegmentViewModel(
+                        hourWidth,
+                        TransparentBrush,
+                        "No data"));
+                    continue;
+                }
+
+                double scale = rawHourSeconds > 0 ? occupiedSeconds / rawHourSeconds : 0;
+                double occupiedWidth = 0;
+
+                foreach ((string app, double seconds) in displayByApp
+                             .OrderByDescending(x => x.Value)
+                             .ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    double width = hourWidth * (seconds / _currentWindow.BucketSeconds) * scale;
+                    if (width <= 0)
+                    {
+                        continue;
+                    }
+
+                    Brush fill = string.Equals(app, "Other", StringComparison.OrdinalIgnoreCase)
+                        ? CreateBrush("#F8B5B5")
+                        : CreateBrush(ColorForKey(app));
+
+                    segments.Add(new TimelineSegmentViewModel(
+                        width,
+                        fill,
+                        $"{app} {ToDuration(seconds)} ({seconds:F0}s)"));
+                    occupiedWidth += width;
+                }
+
+                double gapWidth = Math.Max(0, hourWidth - occupiedWidth);
+                if (gapWidth > 0)
+                {
+                    segments.Add(new TimelineSegmentViewModel(
+                        gapWidth,
+                        TransparentBrush,
+                        "No data"));
+                }
             }
 
             _overviewRows.Add(new TimelineRowViewModel(
-                FormatBucketLabel(bucketStart, bucketEnd),
-                ToDuration(bucketTotalSeconds),
+                FormatBucketLabel(dayStart, dayEnd),
+                ToDuration(dayTotalSeconds),
                 segments));
         }
     }
@@ -455,27 +610,72 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        foreach (DateTimeOffset bucketStart in EnumerateBuckets(_currentWindow))
+        foreach (DateTimeOffset dayStart in EnumerateDayBuckets(_currentWindow))
         {
-            DateTimeOffset bucketEnd = bucketStart + _currentWindow.BucketSize;
-            var grouped = _timelineRows
-                .Where(x => x.BucketStartUtc == bucketStart && string.Equals(x.ExeName, app, StringComparison.OrdinalIgnoreCase))
-                .GroupBy(x => x.State, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.Sum(v => v.Seconds), StringComparer.OrdinalIgnoreCase);
-
-            double activeSeconds = grouped.GetValueOrDefault("Active", 0);
-            double openSeconds = grouped.GetValueOrDefault("Open", 0);
-            double minimizedSeconds = grouped.GetValueOrDefault("Minimized", 0);
-
+            DateTimeOffset dayEnd = dayStart.AddDays(1);
             var segments = new List<TimelineSegmentViewModel>();
-            AddStateSegment(segments, "Active", activeSeconds, _currentWindow.BucketSeconds, "#BFA8FF");
-            AddStateSegment(segments, "Open", openSeconds, _currentWindow.BucketSeconds, "#B8E9C7");
-            AddStateSegment(segments, "Minimized", minimizedSeconds, _currentWindow.BucketSeconds, "#F9E6A6");
+            double dayTotalSeconds = 0;
+            double hourWidth = BucketTrackWidth / 24.0;
 
-            double total = activeSeconds + openSeconds + minimizedSeconds;
+            for (int hour = 0; hour < 24; hour++)
+            {
+                DateTimeOffset hourStart = dayStart.AddHours(hour);
+                var hourRows = _timelineRows
+                    .Where(x => x.BucketStartUtc == hourStart && string.Equals(x.ExeName, app, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (hourRows.Count == 0)
+                {
+                    segments.Add(new TimelineSegmentViewModel(
+                        hourWidth,
+                        TransparentBrush,
+                        "No data"));
+                    continue;
+                }
+
+                var byState = hourRows
+                    .GroupBy(x => x.State, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => Math.Min((double)_currentWindow.BucketSeconds, g.Sum(v => v.Seconds)),
+                        StringComparer.OrdinalIgnoreCase);
+
+                double activeSeconds = byState.GetValueOrDefault("Active", 0);
+                double openSeconds = byState.GetValueOrDefault("Open", 0);
+                double minimizedSeconds = byState.GetValueOrDefault("Minimized", 0);
+                double rawHourSeconds = activeSeconds + openSeconds + minimizedSeconds;
+                double occupiedSeconds = Math.Min((double)_currentWindow.BucketSeconds, rawHourSeconds);
+                dayTotalSeconds += occupiedSeconds;
+
+                if (occupiedSeconds <= 0)
+                {
+                    segments.Add(new TimelineSegmentViewModel(
+                        hourWidth,
+                        TransparentBrush,
+                        "No data"));
+                    continue;
+                }
+
+                double scale = rawHourSeconds > 0 ? occupiedSeconds / rawHourSeconds : 0;
+                double occupiedWidth = 0;
+
+                occupiedWidth += AddStateSegmentWeek(segments, "Active", activeSeconds, _currentWindow.BucketSeconds, "#BFA8FF", hourWidth, scale);
+                occupiedWidth += AddStateSegmentWeek(segments, "Open", openSeconds, _currentWindow.BucketSeconds, "#B8E9C7", hourWidth, scale);
+                occupiedWidth += AddStateSegmentWeek(segments, "Minimized", minimizedSeconds, _currentWindow.BucketSeconds, "#F9E6A6", hourWidth, scale);
+
+                double gapWidth = Math.Max(0, hourWidth - occupiedWidth);
+                if (gapWidth > 0)
+                {
+                    segments.Add(new TimelineSegmentViewModel(
+                        gapWidth,
+                        TransparentBrush,
+                        "No data"));
+                }
+            }
+
             _appRows.Add(new TimelineRowViewModel(
-                FormatBucketLabel(bucketStart, bucketEnd),
-                ToDuration(total),
+                FormatBucketLabel(dayStart, dayEnd),
+                ToDuration(dayTotalSeconds),
                 segments));
         }
     }
@@ -491,41 +691,82 @@ public sealed partial class MainWindow : Window
 
         string[] states = ["Active", "Open", "Minimized"];
         double hourWidth = DailyTrackWidth / 24.0;
+        DateTimeOffset fromUtc = _currentWindow.FromUtc;
 
         foreach (string state in states)
         {
             var segments = new List<AbsoluteSegmentViewModel>();
             double laneTotalSeconds = 0;
 
+            var byHour = _timelineRows
+                .Where(x =>
+                    string.Equals(x.ExeName, app, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(x.State, state, StringComparison.OrdinalIgnoreCase))
+                .Select(x => new
+                {
+                    HourIndex = (int)Math.Floor((x.BucketStartUtc - fromUtc).TotalHours),
+                    x.Seconds
+                })
+                .Where(x => x.HourIndex >= 0 && x.HourIndex < 24)
+                .GroupBy(x => x.HourIndex)
+                .ToDictionary(g => g.Key, g => g.Sum(v => v.Seconds));
+
             for (int hour = 0; hour < 24; hour++)
             {
                 DateTimeOffset bucketStart = _currentWindow.FromUtc.AddHours(hour);
                 DateTimeOffset bucketEnd = bucketStart.AddHours(1);
 
-                double seconds = _timelineRows
-                    .Where(x =>
-                        string.Equals(x.ExeName, app, StringComparison.OrdinalIgnoreCase) &&
-                        string.Equals(x.State, state, StringComparison.OrdinalIgnoreCase) &&
-                        x.BucketStartUtc == bucketStart)
-                    .Sum(x => x.Seconds);
-
-                laneTotalSeconds += seconds;
-                if (seconds <= 0)
+                if (!byHour.TryGetValue(hour, out double seconds))
                 {
+                    segments.Add(new AbsoluteSegmentViewModel(
+                        0,
+                        hourWidth,
+                        TransparentBrush,
+                        "No data"));
                     continue;
                 }
 
-                double width = hourWidth * (seconds / _currentWindow.BucketSeconds);
-                width = Math.Min(hourWidth, Math.Max(1, width));
-                double left = hour * hourWidth;
+                double occupiedSeconds = Math.Min((double)_currentWindow.BucketSeconds, seconds);
+                laneTotalSeconds += occupiedSeconds;
+                if (occupiedSeconds <= 0)
+                {
+                    segments.Add(new AbsoluteSegmentViewModel(
+                        0,
+                        hourWidth,
+                        TransparentBrush,
+                        "No data"));
+                    continue;
+                }
+
+                double width = hourWidth * (occupiedSeconds / _currentWindow.BucketSeconds);
+                width = Math.Min(hourWidth, width);
+                if (width <= 0)
+                {
+                    segments.Add(new AbsoluteSegmentViewModel(
+                        0,
+                        hourWidth,
+                        TransparentBrush,
+                        "No data"));
+                    continue;
+                }
 
                 DateTimeOffset localStart = bucketStart.ToLocalTime();
                 DateTimeOffset localEnd = bucketEnd.ToLocalTime();
                 segments.Add(new AbsoluteSegmentViewModel(
-                    left,
+                    0,
                     width,
                     CreateBrush(ColorForAppState(app, state)),
-                    $"{state} | {app} | {localStart:HH\\:mm}-{localEnd:HH\\:mm} | {ToDuration(seconds)}"));
+                    $"{state} | {app} | {localStart:HH\\:mm}-{localEnd:HH\\:mm} | {ToDuration(occupiedSeconds)}"));
+
+                double gapWidth = Math.Max(0, hourWidth - width);
+                if (gapWidth > 0)
+                {
+                    segments.Add(new AbsoluteSegmentViewModel(
+                        0,
+                        gapWidth,
+                        TransparentBrush,
+                        "No data"));
+                }
             }
 
             _appDailyLanes.Add(new StateLaneViewModel(
@@ -535,34 +776,31 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private static void AddStateSegment(
+    private static double AddStateSegmentWeek(
         ICollection<TimelineSegmentViewModel> segments,
         string state,
         double seconds,
         int bucketSeconds,
-        string colorHex)
+        string colorHex,
+        double hourWidth,
+        double scale)
     {
-        if (seconds <= 0 || bucketSeconds <= 0)
-        {
-            return;
-        }
-
-        double width = CalculateShareWidth(seconds, bucketSeconds, BucketTrackWidth);
-        segments.Add(new TimelineSegmentViewModel(
-            width,
-            CreateBrush(colorHex),
-            $"{state} {ToDuration(seconds)} ({seconds:F0}s)"));
-    }
-
-    private static double CalculateShareWidth(double part, double whole, double width)
-    {
-        if (part <= 0 || whole <= 0 || width <= 0)
+        if (seconds <= 0 || bucketSeconds <= 0 || hourWidth <= 0 || scale <= 0)
         {
             return 0;
         }
 
-        double raw = width * (part / whole);
-        return Math.Max(1, raw);
+        double width = hourWidth * (seconds / bucketSeconds) * scale;
+        if (width <= 0)
+        {
+            return 0;
+        }
+
+        segments.Add(new TimelineSegmentViewModel(
+            width,
+            CreateBrush(colorHex),
+            $"{state} {ToDuration(seconds)} ({seconds:F0}s)"));
+        return width;
     }
 
     private static string FormatBucketLabel(DateTimeOffset bucketStartUtc, DateTimeOffset bucketEndUtc)
@@ -578,13 +816,13 @@ public sealed partial class MainWindow : Window
         return $"{localStart:MM/dd HH:mm} - {localEnd:HH:mm}";
     }
 
-    private static IEnumerable<DateTimeOffset> EnumerateBuckets(UsageQueryWindow window)
+    private static IEnumerable<DateTimeOffset> EnumerateDayBuckets(UsageQueryWindow window)
     {
         DateTimeOffset cursor = window.FromUtc;
         while (cursor < window.ToUtc)
         {
             yield return cursor;
-            cursor = cursor.Add(window.BucketSize);
+            cursor = cursor.AddDays(1);
         }
     }
 
@@ -609,24 +847,7 @@ public sealed partial class MainWindow : Window
 
     private static string ColorForAppState(string appKey, string state)
     {
-        int hue = HashToHue(appKey);
-        double saturation = state switch
-        {
-            "Active" => 0.74,
-            "Open" => 0.56,
-            "Minimized" => 0.38,
-            _ => 0.52
-        };
-        double lightness = state switch
-        {
-            "Active" => 0.52,
-            "Open" => 0.50,
-            "Minimized" => 0.48,
-            _ => 0.50
-        };
-
-        (byte r, byte g, byte b) = HslToRgb(hue / 360.0, saturation, lightness);
-        return $"#{r:X2}{g:X2}{b:X2}";
+        return ColorForKey(appKey);
     }
 
     private static string ColorForKey(string key)
@@ -709,6 +930,8 @@ public sealed partial class MainWindow : Window
         _appDailyLanes.Clear();
         _appRows.Clear();
         _appNames.Clear();
+        _overviewLegendItems.Clear();
+        _appLegendItems.Clear();
         AppComboBox.SelectedItem = null;
     }
 
