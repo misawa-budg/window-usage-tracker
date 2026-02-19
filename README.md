@@ -63,25 +63,32 @@ dotnet test .\WinTracker.Viewer.Tests\WinTracker.Viewer.Tests.csproj
 - DB: `data/collector.db`（カレントディレクトリ基準）
 - Collector 設定: `WinTracker.Collector/collector.settings.json`
 
-## 配布（最小手順）
-1. publish
-```powershell
-dotnet publish .\WinTracker.Collector\WinTracker.Collector.csproj -c Release -r win-x64 --self-contained false -o .\artifacts\collector
-dotnet publish .\WinTracker.Viewer\WinTracker.Viewer.csproj -c Release -r win-x64 --self-contained false -o .\artifacts\viewer
-```
-2. `collector.settings.json` を `artifacts\collector\` に配置する  
-`WinTracker.Collector\collector.settings.json` をそのままコピーすればOKです。
-3. 配布先では、Collector と Viewer が同じ `data\collector.db` を参照できるように配置する
-4. 起動
-```powershell
-.\artifacts\collector\WinTracker.Collector.exe
-.\artifacts\viewer\WinTracker.Viewer.exe
-```
+## 配布（推奨）
+配布先で確実にDB共有させるには、`release.ps1` が生成する **portable zip** を使ってください。
+
+- `wintracker-portable-win-x64-fd.zip`
+- `wintracker-portable-win-x64-sc.zip`
+
+これらは次の構成で同梱されます。
+
+- `collector\`（Collector本体）
+- `viewer\`（Viewer本体）
+- `data\`（共有DB置き場）
+- `collector.settings.json`（ルート配置）
+- `Run-Collector.cmd`
+- `Run-Viewer.cmd`
+
+起動は `Run-Collector.cmd` / `Run-Viewer.cmd` をダブルクリックしてください。  
+この起動方法なら、両方が同じ `data\collector.db` を参照します。
+
+補足:
+- `collector-*.zip` と `viewer-*.zip` を別々に配る方式も可能ですが、利用者が作業ディレクトリを揃えないとDB共有できません。
 
 ## 一括配布スクリプト
 `release.ps1` で以下を一括生成できます。
 - `collector/viewer` の `framework-dependent`（`-fd`）版
 - `collector/viewer` の `self-contained`（`-sc`）版
+- `portable`（Collector+Viewer+共有data+起動cmd同梱）の `-fd / -sc` 版
 - 各成果物の `.zip`
 
 注:

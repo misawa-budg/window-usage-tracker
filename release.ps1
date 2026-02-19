@@ -199,6 +199,67 @@ function New-ZipPackage {
     Write-Host "Created: $ZipPath"
 }
 
+function New-PortableBundle {
+    param(
+        [Parameter(Mandatory = $true)][string]$ResolvedOutputRoot,
+        [Parameter(Mandatory = $true)][string]$RuntimeIdentifier,
+        [Parameter(Mandatory = $true)][string]$ModeSuffix
+    )
+
+    $collectorPackageDir = Join-Path $ResolvedOutputRoot ("collector-{0}-{1}" -f $RuntimeIdentifier, $ModeSuffix)
+    $viewerPackageDir = Join-Path $ResolvedOutputRoot ("viewer-{0}-{1}" -f $RuntimeIdentifier, $ModeSuffix)
+    if (-not (Test-Path $collectorPackageDir)) {
+        throw "Collector package directory not found: $collectorPackageDir"
+    }
+
+    if (-not (Test-Path $viewerPackageDir)) {
+        throw "Viewer package directory not found: $viewerPackageDir"
+    }
+
+    $bundleName = "wintracker-portable-{0}-{1}" -f $RuntimeIdentifier, $ModeSuffix
+    $bundleDir = Join-Path $ResolvedOutputRoot $bundleName
+    if (Test-Path $bundleDir) {
+        if ($StopRunningApps) {
+            Stop-WinTrackerProcessesUnderPath -RootPath $bundleDir
+        }
+
+        Invoke-WithRetry `
+            -Description "Remove existing portable bundle directory $bundleDir" `
+            -Action { Remove-Item -Path $bundleDir -Recurse -Force }
+    }
+
+    New-Item -Path $bundleDir -ItemType Directory -Force | Out-Null
+    Copy-DirectoryContents -SourceDir $collectorPackageDir -DestinationDir (Join-Path $bundleDir "collector")
+    Copy-DirectoryContents -SourceDir $viewerPackageDir -DestinationDir (Join-Path $bundleDir "viewer")
+    New-Item -Path (Join-Path $bundleDir "data") -ItemType Directory -Force | Out-Null
+
+    $settingsSource = Join-Path $collectorPackageDir "collector.settings.json"
+    if (Test-Path $settingsSource) {
+        Copy-Item -Path $settingsSource -Destination (Join-Path $bundleDir "collector.settings.json") -Force
+    }
+
+    $collectorLauncher = @(
+        "@echo off"
+        "setlocal"
+        "cd /d ""%~dp0"""
+        ".\collector\WinTracker.Collector.exe"
+    )
+    Set-Content -Path (Join-Path $bundleDir "Run-Collector.cmd") -Value $collectorLauncher -Encoding ASCII
+
+    $viewerLauncher = @(
+        "@echo off"
+        "setlocal"
+        "cd /d ""%~dp0"""
+        "start """" .\viewer\WinTracker.Viewer.exe"
+    )
+    Set-Content -Path (Join-Path $bundleDir "Run-Viewer.cmd") -Value $viewerLauncher -Encoding ASCII
+
+    if (-not $NoZip) {
+        $zipPath = Join-Path $ResolvedOutputRoot ("{0}.zip" -f $bundleName)
+        New-ZipPackage -SourceDir $bundleDir -ZipPath $zipPath
+    }
+}
+
 $repoRoot = $PSScriptRoot
 $resolvedOutputRoot = Join-Path $repoRoot $OutputRoot
 New-Item -Path $resolvedOutputRoot -ItemType Directory -Force | Out-Null
@@ -258,6 +319,13 @@ foreach ($target in $targets) {
             New-ZipPackage -SourceDir $publishDir -ZipPath $zipPath
         }
     }
+}
+
+foreach ($mode in $modes) {
+    New-PortableBundle `
+        -ResolvedOutputRoot $resolvedOutputRoot `
+        -RuntimeIdentifier $Runtime `
+        -ModeSuffix $mode.Suffix
 }
 
 Write-Host ""
