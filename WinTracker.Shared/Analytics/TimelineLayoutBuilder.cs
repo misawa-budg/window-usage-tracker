@@ -393,7 +393,6 @@ public sealed class TimelineLayoutBuilder
                     continue;
                 }
 
-                double scale = rawHourSeconds > 0 ? occupiedSeconds / rawHourSeconds : 0;
                 double occupiedWidth = 0;
                 DateTimeOffset localStart = bucketStart.ToLocalTime();
                 DateTimeOffset localEnd = bucketEnd.ToLocalTime();
@@ -403,10 +402,9 @@ public sealed class TimelineLayoutBuilder
                     appName,
                     "Active",
                     activeSeconds,
-                    window.BucketSeconds,
+                    rawHourSeconds,
                     ActiveColorHex,
                     bucketWidth,
-                    scale,
                     localStart,
                     localEnd);
                 occupiedWidth += AddDailyStateSegmentForApp(
@@ -414,10 +412,9 @@ public sealed class TimelineLayoutBuilder
                     appName,
                     "Open",
                     openSeconds,
-                    window.BucketSeconds,
+                    rawHourSeconds,
                     OpenColorHex,
                     bucketWidth,
-                    scale,
                     localStart,
                     localEnd);
                 occupiedWidth += AddDailyStateSegmentForApp(
@@ -425,10 +422,9 @@ public sealed class TimelineLayoutBuilder
                     appName,
                     "Minimized",
                     minimizedSeconds,
-                    window.BucketSeconds,
+                    rawHourSeconds,
                     MinimizedColorHex,
                     bucketWidth,
-                    scale,
                     localStart,
                     localEnd);
 
@@ -902,19 +898,19 @@ public sealed class TimelineLayoutBuilder
         string appName,
         string state,
         double seconds,
-        int bucketSeconds,
+        double stateTotalSeconds,
         string colorHex,
         double hourWidth,
-        double scale,
         DateTimeOffset localStart,
         DateTimeOffset localEnd)
     {
-        if (seconds <= 0 || bucketSeconds <= 0 || hourWidth <= 0 || scale <= 0)
+        if (seconds <= 0 || stateTotalSeconds <= 0 || hourWidth <= 0)
         {
             return 0;
         }
 
-        double width = hourWidth * (seconds / bucketSeconds) * scale;
+        double width = hourWidth * (seconds / stateTotalSeconds);
+        width = Math.Min(hourWidth, width);
         if (width <= 0)
         {
             return 0;

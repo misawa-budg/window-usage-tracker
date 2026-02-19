@@ -18,6 +18,7 @@ public sealed partial class MainWindow : Window
     private const double DailyTrackWidth = 960.0;
     private const int TopAppCount = 8;
     private const string DefaultDatabasePath = "data/collector.db";
+    private const int DailyBucketMinutes = 5;
     private const int MinWindowWidth = 1100;
     private const int MinWindowHeight = 700;
     private const int CompactTickSwitchWidth = 1360;
@@ -268,7 +269,7 @@ public sealed partial class MainWindow : Window
         return new UsageQueryWindow(
             dayStartLocal.ToUniversalTime(),
             dayEndLocal.ToUniversalTime(),
-            TimeSpan.FromMinutes(1));
+            TimeSpan.FromMinutes(DailyBucketMinutes));
     }
 
     private static UsageQueryWindow CreateLocalWeekWindow()
