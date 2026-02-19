@@ -107,6 +107,29 @@ public sealed class TimelineLayoutBuilderTests
     }
 
     [Fact]
+    public void BuildDailyStateStackRows_OrdersConcurrentAppsByName()
+    {
+        var builder = new TimelineLayoutBuilder();
+        UsageQueryWindow window = new(
+            Utc(2026, 2, 19, 0, 0, 0),
+            Utc(2026, 2, 20, 0, 0, 0),
+            TimeSpan.FromMinutes(1));
+
+        IReadOnlyList<TimelineUsageRow> rows =
+        [
+            new(Utc(2026, 2, 19, 0, 10, 0), "powershell.exe", "Active", 300),
+            new(Utc(2026, 2, 19, 0, 10, 0), "devenv.exe", "Active", 300),
+            new(Utc(2026, 2, 19, 0, 10, 0), "msedge.exe", "Active", 300)
+        ];
+
+        IReadOnlyList<StateStackRowLayout> result = builder.BuildDailyStateStackRows(rows, window, trackWidth: 960);
+        StateStackRowLayout running = Assert.Single(result);
+        StackedColumnLayout column = Assert.Single(running.Columns, x => !x.IsNoData);
+
+        Assert.Equal(["devenv.exe", "msedge.exe", "powershell.exe"], column.Entries.Select(x => x.Label).ToArray());
+    }
+
+    [Fact]
     public void BuildOverviewRows_ForWeek_ReturnsSevenDayRows_WithCappedTotals()
     {
         var builder = new TimelineLayoutBuilder();

@@ -474,8 +474,7 @@ public sealed class TimelineLayoutBuilder
                         Math.Min((double)window.BucketSeconds, v.Sum(t => t.Seconds)),
                         ColorForKey(v.Key)))
                     .Where(v => v.Seconds > 0)
-                    .OrderByDescending(v => v.Seconds)
-                    .ThenBy(v => v.ExeName, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(v => v.ExeName, StringComparer.OrdinalIgnoreCase)
                     .ToList());
 
         var accumulator = new StateStackAccumulator("Running");
