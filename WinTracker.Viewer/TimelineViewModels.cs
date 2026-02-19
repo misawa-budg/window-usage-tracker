@@ -49,15 +49,13 @@ public sealed class StateLaneViewModel
 
 public sealed class AbsoluteSegmentViewModel
 {
-    public AbsoluteSegmentViewModel(double left, double width, Brush fill, string tooltip)
+    public AbsoluteSegmentViewModel(double width, Brush fill, string tooltip)
     {
-        Left = left;
         Width = width;
         Fill = fill;
         Tooltip = tooltip;
     }
 
-    public double Left { get; }
     public double Width { get; }
     public Brush Fill { get; }
     public string Tooltip { get; }

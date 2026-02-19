@@ -23,6 +23,8 @@ public sealed partial class MainWindow : Window
     private const int CompactTickSwitchWidth = 1360;
     private const double TickOffsetBase = 100.0;
     private const double TickOffsetMax = 100.0;
+    private const string NoDataTooltip = "No data";
+    private static readonly string[] AppStates = ["Active", "Open", "Minimized"];
     private static readonly SolidColorBrush RefreshButtonNormalBrush = CreateBrush("#BFA8FF");
     private static readonly SolidColorBrush RefreshButtonHoverBrush = CreateBrush("#A892F2");
     private static readonly SolidColorBrush RefreshButtonPressedBrush = CreateBrush("#967EE8");
@@ -96,29 +98,10 @@ public sealed partial class MainWindow : Window
     private void UpdateTimeTickLabels()
     {
         bool compact = AppWindow.Size.Width < CompactTickSwitchWidth;
-        Tick00TextBlock.Text = compact ? "0" : "00:00";
-        Tick06TextBlock.Text = compact ? "6" : "06:00";
-        Tick12TextBlock.Text = compact ? "12" : "12:00";
-        Tick18TextBlock.Text = compact ? "18" : "18:00";
-        Tick24TextBlock.Text = compact ? "24" : "24:00";
-
-        AppTick00TextBlock.Text = compact ? "0" : "00:00";
-        AppTick06TextBlock.Text = compact ? "6" : "06:00";
-        AppTick12TextBlock.Text = compact ? "12" : "12:00";
-        AppTick18TextBlock.Text = compact ? "18" : "18:00";
-        AppTick24TextBlock.Text = compact ? "24" : "24:00";
-
-        WeekTick00TextBlock.Text = compact ? "0" : "00:00";
-        WeekTick06TextBlock.Text = compact ? "6" : "06:00";
-        WeekTick12TextBlock.Text = compact ? "12" : "12:00";
-        WeekTick18TextBlock.Text = compact ? "18" : "18:00";
-        WeekTick24TextBlock.Text = compact ? "24" : "24:00";
-
-        AppWeekTick00TextBlock.Text = compact ? "0" : "00:00";
-        AppWeekTick06TextBlock.Text = compact ? "6" : "06:00";
-        AppWeekTick12TextBlock.Text = compact ? "12" : "12:00";
-        AppWeekTick18TextBlock.Text = compact ? "18" : "18:00";
-        AppWeekTick24TextBlock.Text = compact ? "24" : "24:00";
+        SetTickTexts(Tick00TextBlock, Tick06TextBlock, Tick12TextBlock, Tick18TextBlock, Tick24TextBlock, compact);
+        SetTickTexts(AppTick00TextBlock, AppTick06TextBlock, AppTick12TextBlock, AppTick18TextBlock, AppTick24TextBlock, compact);
+        SetTickTexts(WeekTick00TextBlock, WeekTick06TextBlock, WeekTick12TextBlock, WeekTick18TextBlock, WeekTick24TextBlock, compact);
+        SetTickTexts(AppWeekTick00TextBlock, AppWeekTick06TextBlock, AppWeekTick12TextBlock, AppWeekTick18TextBlock, AppWeekTick24TextBlock, compact);
 
         UpdateTickOffsets();
     }
@@ -127,14 +110,31 @@ public sealed partial class MainWindow : Window
     {
         double extra = Math.Max(0, AppWindow.Size.Width - MinWindowWidth);
         double offset = Math.Min(TickOffsetMax, TickOffsetBase + (extra / 120.0));
-        Tick06TextBlock.Margin = new Thickness(-offset, 0, 0, 0);
-        Tick18TextBlock.Margin = new Thickness(offset, 0, 0, 0);
-        AppTick06TextBlock.Margin = new Thickness(-offset, 0, 0, 0);
-        AppTick18TextBlock.Margin = new Thickness(offset, 0, 0, 0);
-        WeekTick06TextBlock.Margin = new Thickness(-offset, 0, 0, 0);
-        WeekTick18TextBlock.Margin = new Thickness(offset, 0, 0, 0);
-        AppWeekTick06TextBlock.Margin = new Thickness(-offset, 0, 0, 0);
-        AppWeekTick18TextBlock.Margin = new Thickness(offset, 0, 0, 0);
+        SetTickOffsets(Tick06TextBlock, Tick18TextBlock, offset);
+        SetTickOffsets(AppTick06TextBlock, AppTick18TextBlock, offset);
+        SetTickOffsets(WeekTick06TextBlock, WeekTick18TextBlock, offset);
+        SetTickOffsets(AppWeekTick06TextBlock, AppWeekTick18TextBlock, offset);
+    }
+
+    private static void SetTickTexts(
+        TextBlock tick00,
+        TextBlock tick06,
+        TextBlock tick12,
+        TextBlock tick18,
+        TextBlock tick24,
+        bool compact)
+    {
+        tick00.Text = compact ? "0" : "00:00";
+        tick06.Text = compact ? "6" : "06:00";
+        tick12.Text = compact ? "12" : "12:00";
+        tick18.Text = compact ? "18" : "18:00";
+        tick24.Text = compact ? "24" : "24:00";
+    }
+
+    private static void SetTickOffsets(TextBlock tick06, TextBlock tick18, double offset)
+    {
+        tick06.Margin = new Thickness(-offset, 0, 0, 0);
+        tick18.Margin = new Thickness(offset, 0, 0, 0);
     }
 
     private async void OnRefreshClicked(object sender, RoutedEventArgs e)
@@ -307,11 +307,10 @@ public sealed partial class MainWindow : Window
     {
         _overviewDailyLanes.Clear();
 
-        string[] states = ["Active", "Open", "Minimized"];
         double hourWidth = DailyTrackWidth / 24.0;
         DateTimeOffset fromUtc = _currentWindow.FromUtc;
 
-        foreach (string state in states)
+        foreach (string state in AppStates)
         {
             var segments = new List<AbsoluteSegmentViewModel>();
             double laneTotalSeconds = 0;
@@ -338,11 +337,7 @@ public sealed partial class MainWindow : Window
 
                 if (!byHour.TryGetValue(hour, out Dictionary<string, double>? byApp))
                 {
-                    segments.Add(new AbsoluteSegmentViewModel(
-                        0,
-                        hourWidth,
-                        TransparentBrush,
-                        "No data"));
+                    AddNoDataAbsoluteSegment(segments, hourWidth);
                     continue;
                 }
 
@@ -358,11 +353,7 @@ public sealed partial class MainWindow : Window
 
                 if (occupiedSeconds <= 0)
                 {
-                    segments.Add(new AbsoluteSegmentViewModel(
-                        0,
-                        hourWidth,
-                        TransparentBrush,
-                        "No data"));
+                    AddNoDataAbsoluteSegment(segments, hourWidth);
                     continue;
                 }
 
@@ -387,9 +378,8 @@ public sealed partial class MainWindow : Window
                     DateTimeOffset localStart = bucketStart.ToLocalTime();
                     DateTimeOffset localEnd = bucketEnd.ToLocalTime();
                     segments.Add(new AbsoluteSegmentViewModel(
-                        0,
                         width,
-                        CreateBrush(ColorForAppState(exeName, state)),
+                        CreateBrush(ColorForApp(exeName)),
                         $"{state} | {exeName} | {localStart:HH\\:mm}-{localEnd:HH\\:mm} | {ToDuration(seconds)}"));
                     occupiedWidth += width;
                 }
@@ -397,11 +387,7 @@ public sealed partial class MainWindow : Window
                 double gapWidth = Math.Max(0, hourWidth - occupiedWidth);
                 if (gapWidth > 0)
                 {
-                    segments.Add(new AbsoluteSegmentViewModel(
-                        0,
-                        gapWidth,
-                        TransparentBrush,
-                        "No data"));
+                    AddNoDataAbsoluteSegment(segments, gapWidth);
                 }
             }
 
@@ -519,10 +505,7 @@ public sealed partial class MainWindow : Window
 
                 if (hourRows.Count == 0)
                 {
-                    segments.Add(new TimelineSegmentViewModel(
-                        hourWidth,
-                        TransparentBrush,
-                        "No data"));
+                    AddNoDataTimelineSegment(segments, hourWidth);
                     continue;
                 }
 
@@ -552,10 +535,7 @@ public sealed partial class MainWindow : Window
 
                 if (occupiedSeconds <= 0)
                 {
-                    segments.Add(new TimelineSegmentViewModel(
-                        hourWidth,
-                        TransparentBrush,
-                        "No data"));
+                    AddNoDataTimelineSegment(segments, hourWidth);
                     continue;
                 }
 
@@ -586,10 +566,7 @@ public sealed partial class MainWindow : Window
                 double gapWidth = Math.Max(0, hourWidth - occupiedWidth);
                 if (gapWidth > 0)
                 {
-                    segments.Add(new TimelineSegmentViewModel(
-                        gapWidth,
-                        TransparentBrush,
-                        "No data"));
+                    AddNoDataTimelineSegment(segments, gapWidth);
                 }
             }
 
@@ -626,10 +603,7 @@ public sealed partial class MainWindow : Window
 
                 if (hourRows.Count == 0)
                 {
-                    segments.Add(new TimelineSegmentViewModel(
-                        hourWidth,
-                        TransparentBrush,
-                        "No data"));
+                    AddNoDataTimelineSegment(segments, hourWidth);
                     continue;
                 }
 
@@ -649,10 +623,7 @@ public sealed partial class MainWindow : Window
 
                 if (occupiedSeconds <= 0)
                 {
-                    segments.Add(new TimelineSegmentViewModel(
-                        hourWidth,
-                        TransparentBrush,
-                        "No data"));
+                    AddNoDataTimelineSegment(segments, hourWidth);
                     continue;
                 }
 
@@ -666,10 +637,7 @@ public sealed partial class MainWindow : Window
                 double gapWidth = Math.Max(0, hourWidth - occupiedWidth);
                 if (gapWidth > 0)
                 {
-                    segments.Add(new TimelineSegmentViewModel(
-                        gapWidth,
-                        TransparentBrush,
-                        "No data"));
+                    AddNoDataTimelineSegment(segments, gapWidth);
                 }
             }
 
@@ -689,11 +657,10 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        string[] states = ["Active", "Open", "Minimized"];
         double hourWidth = DailyTrackWidth / 24.0;
         DateTimeOffset fromUtc = _currentWindow.FromUtc;
 
-        foreach (string state in states)
+        foreach (string state in AppStates)
         {
             var segments = new List<AbsoluteSegmentViewModel>();
             double laneTotalSeconds = 0;
@@ -718,11 +685,7 @@ public sealed partial class MainWindow : Window
 
                 if (!byHour.TryGetValue(hour, out double seconds))
                 {
-                    segments.Add(new AbsoluteSegmentViewModel(
-                        0,
-                        hourWidth,
-                        TransparentBrush,
-                        "No data"));
+                    AddNoDataAbsoluteSegment(segments, hourWidth);
                     continue;
                 }
 
@@ -730,11 +693,7 @@ public sealed partial class MainWindow : Window
                 laneTotalSeconds += occupiedSeconds;
                 if (occupiedSeconds <= 0)
                 {
-                    segments.Add(new AbsoluteSegmentViewModel(
-                        0,
-                        hourWidth,
-                        TransparentBrush,
-                        "No data"));
+                    AddNoDataAbsoluteSegment(segments, hourWidth);
                     continue;
                 }
 
@@ -742,30 +701,21 @@ public sealed partial class MainWindow : Window
                 width = Math.Min(hourWidth, width);
                 if (width <= 0)
                 {
-                    segments.Add(new AbsoluteSegmentViewModel(
-                        0,
-                        hourWidth,
-                        TransparentBrush,
-                        "No data"));
+                    AddNoDataAbsoluteSegment(segments, hourWidth);
                     continue;
                 }
 
                 DateTimeOffset localStart = bucketStart.ToLocalTime();
                 DateTimeOffset localEnd = bucketEnd.ToLocalTime();
                 segments.Add(new AbsoluteSegmentViewModel(
-                    0,
                     width,
-                    CreateBrush(ColorForAppState(app, state)),
+                    CreateBrush(ColorForApp(app)),
                     $"{state} | {app} | {localStart:HH\\:mm}-{localEnd:HH\\:mm} | {ToDuration(occupiedSeconds)}"));
 
                 double gapWidth = Math.Max(0, hourWidth - width);
                 if (gapWidth > 0)
                 {
-                    segments.Add(new AbsoluteSegmentViewModel(
-                        0,
-                        gapWidth,
-                        TransparentBrush,
-                        "No data"));
+                    AddNoDataAbsoluteSegment(segments, gapWidth);
                 }
             }
 
@@ -774,6 +724,22 @@ public sealed partial class MainWindow : Window
                 ToDuration(laneTotalSeconds),
                 segments));
         }
+    }
+
+    private static void AddNoDataTimelineSegment(ICollection<TimelineSegmentViewModel> segments, double width)
+    {
+        segments.Add(new TimelineSegmentViewModel(
+            width,
+            TransparentBrush,
+            NoDataTooltip));
+    }
+
+    private static void AddNoDataAbsoluteSegment(ICollection<AbsoluteSegmentViewModel> segments, double width)
+    {
+        segments.Add(new AbsoluteSegmentViewModel(
+            width,
+            TransparentBrush,
+            NoDataTooltip));
     }
 
     private static double AddStateSegmentWeek(
@@ -845,7 +811,7 @@ public sealed partial class MainWindow : Window
         return new SolidColorBrush(Windows.UI.Color.FromArgb(255, r, g, b));
     }
 
-    private static string ColorForAppState(string appKey, string state)
+    private static string ColorForApp(string appKey)
     {
         return ColorForKey(appKey);
     }
