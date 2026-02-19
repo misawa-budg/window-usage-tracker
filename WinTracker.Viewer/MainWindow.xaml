@@ -90,6 +90,7 @@
                                 Padding="16,10"
                                 Background="{StaticResource BrushStateActive}"
                                 Foreground="{StaticResource BrushTextPrimary}"
+                                FontSize="14"
                                 FontWeight="SemiBold"
                                 CornerRadius="12"
                                 Click="OnRefreshClicked"
@@ -113,10 +114,16 @@
                         BorderBrush="{StaticResource BrushBorderSoft}"
                         BorderThickness="1"
                         CornerRadius="{StaticResource RadiusCard}">
-                        <Pivot
-                            FontSize="13"
-                            FontWeight="SemiBold"
-                            Foreground="{StaticResource BrushTextPrimary}">
+                        <Pivot Foreground="{StaticResource BrushTextPrimary}">
+                            <Pivot.HeaderTemplate>
+                                <DataTemplate>
+                                    <TextBlock
+                                        FontSize="14"
+                                        FontWeight="SemiBold"
+                                        Foreground="{StaticResource BrushTextPrimary}"
+                                        Text="{Binding}" />
+                                </DataTemplate>
+                            </Pivot.HeaderTemplate>
                             <PivotItem Header="一覧タイムライン">
                                 <Grid Margin="0,20,0,0">
                                     <Grid.RowDefinitions>
