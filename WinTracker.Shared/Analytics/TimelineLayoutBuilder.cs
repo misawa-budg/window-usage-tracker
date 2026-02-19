@@ -163,6 +163,350 @@ public sealed class TimelineLayoutBuilder
         return lanes;
     }
 
+    public IReadOnlyList<StateGroupLayout> BuildDailyStateGroups(
+        IReadOnlyList<TimelineUsageRow> timelineRows,
+        UsageQueryWindow window,
+        double trackWidth)
+    {
+        int bucketCount = CalculateBucketCount(window);
+        double bucketWidth = trackWidth / bucketCount;
+        DateTimeOffset fromUtc = window.FromUtc;
+        var groups = new List<StateGroupLayout>();
+
+        foreach (string state in AppStates)
+        {
+            Dictionary<string, Dictionary<int, double>> secondsByAppByBucket = timelineRows
+                .Where(x => string.Equals(x.State, state, StringComparison.OrdinalIgnoreCase))
+                .Select(x => new
+                {
+                    x.ExeName,
+                    BucketIndex = ToBucketIndex(x.BucketStartUtc, fromUtc, window.BucketSeconds),
+                    x.Seconds
+                })
+                .Where(x => x.BucketIndex >= 0 && x.BucketIndex < bucketCount)
+                .GroupBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.GroupBy(v => v.BucketIndex).ToDictionary(v => v.Key, v => v.Sum(t => t.Seconds)),
+                    StringComparer.OrdinalIgnoreCase);
+
+            Dictionary<string, double> totalsByApp = secondsByAppByBucket
+                .ToDictionary(
+                    x => x.Key,
+                    x => x.Value.Sum(v => Math.Min((double)window.BucketSeconds, v.Value)),
+                    StringComparer.OrdinalIgnoreCase);
+
+            List<string> topApps = totalsByApp
+                .OrderByDescending(x => x.Value)
+                .ThenBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+                .Take(_topAppCount)
+                .Select(x => x.Key)
+                .ToList();
+
+            var lanes = new List<StateLaneLayout>();
+            double groupTotalSeconds = 0;
+
+            foreach (string app in topApps)
+            {
+                Dictionary<int, double> byBucket = secondsByAppByBucket[app];
+                var accumulator = new SegmentAccumulator();
+                double laneTotalSeconds = 0;
+
+                for (int bucketIndex = 0; bucketIndex < bucketCount; bucketIndex++)
+                {
+                    DateTimeOffset bucketStart = window.FromUtc.AddSeconds((long)bucketIndex * window.BucketSeconds);
+                    DateTimeOffset bucketEnd = bucketStart.AddSeconds(window.BucketSeconds);
+
+                    if (!byBucket.TryGetValue(bucketIndex, out double seconds))
+                    {
+                        accumulator.AddNoData(bucketWidth);
+                        continue;
+                    }
+
+                    double occupiedSeconds = Math.Min((double)window.BucketSeconds, seconds);
+                    laneTotalSeconds += occupiedSeconds;
+                    if (occupiedSeconds <= 0)
+                    {
+                        accumulator.AddNoData(bucketWidth);
+                        continue;
+                    }
+
+                    double width = bucketWidth * (occupiedSeconds / window.BucketSeconds);
+                    width = Math.Min(bucketWidth, width);
+                    if (width <= 0)
+                    {
+                        accumulator.AddNoData(bucketWidth);
+                        continue;
+                    }
+
+                    DateTimeOffset localStart = bucketStart.ToLocalTime();
+                    DateTimeOffset localEnd = bucketEnd.ToLocalTime();
+                    accumulator.AddData(
+                        width,
+                        ColorForKey(app),
+                        $"{state}|{app}",
+                        $"{state} | {app}",
+                        localStart,
+                        localEnd,
+                        occupiedSeconds);
+
+                    double gapWidth = Math.Max(0, bucketWidth - width);
+                    if (gapWidth > 0)
+                    {
+                        accumulator.AddNoData(gapWidth);
+                    }
+                }
+
+                groupTotalSeconds += laneTotalSeconds;
+                lanes.Add(new StateLaneLayout(
+                    app,
+                    ToDuration(laneTotalSeconds),
+                    accumulator.Build()));
+            }
+
+            if (totalsByApp.Count > topApps.Count)
+            {
+                var otherAccumulator = new SegmentAccumulator();
+                double otherTotalSeconds = 0;
+                HashSet<string> topAppsSet = topApps.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                for (int bucketIndex = 0; bucketIndex < bucketCount; bucketIndex++)
+                {
+                    DateTimeOffset bucketStart = window.FromUtc.AddSeconds((long)bucketIndex * window.BucketSeconds);
+                    DateTimeOffset bucketEnd = bucketStart.AddSeconds(window.BucketSeconds);
+                    double otherSeconds = totalsByApp
+                        .Where(x => !topAppsSet.Contains(x.Key))
+                        .Select(x => secondsByAppByBucket[x.Key].GetValueOrDefault(bucketIndex, 0))
+                        .Sum();
+
+                    double occupiedSeconds = Math.Min((double)window.BucketSeconds, otherSeconds);
+                    otherTotalSeconds += occupiedSeconds;
+                    if (occupiedSeconds <= 0)
+                    {
+                        otherAccumulator.AddNoData(bucketWidth);
+                        continue;
+                    }
+
+                    double width = bucketWidth * (occupiedSeconds / window.BucketSeconds);
+                    width = Math.Min(bucketWidth, width);
+                    if (width <= 0)
+                    {
+                        otherAccumulator.AddNoData(bucketWidth);
+                        continue;
+                    }
+
+                    DateTimeOffset localStart = bucketStart.ToLocalTime();
+                    DateTimeOffset localEnd = bucketEnd.ToLocalTime();
+                    otherAccumulator.AddData(
+                        width,
+                        OtherColorHex,
+                        $"{state}|{OtherLabel}",
+                        $"{state} | {OtherLabel}",
+                        localStart,
+                        localEnd,
+                        occupiedSeconds);
+
+                    double gapWidth = Math.Max(0, bucketWidth - width);
+                    if (gapWidth > 0)
+                    {
+                        otherAccumulator.AddNoData(gapWidth);
+                    }
+                }
+
+                groupTotalSeconds += otherTotalSeconds;
+                lanes.Add(new StateLaneLayout(
+                    OtherLabel,
+                    ToDuration(otherTotalSeconds),
+                    otherAccumulator.Build()));
+            }
+
+            groups.Add(new StateGroupLayout(
+                state,
+                ToDuration(groupTotalSeconds),
+                lanes));
+        }
+
+        return groups;
+    }
+
+    public IReadOnlyList<StateLaneLayout> BuildDailyAppRows(
+        IReadOnlyList<TimelineUsageRow> timelineRows,
+        UsageQueryWindow window,
+        double trackWidth)
+    {
+        int bucketCount = CalculateBucketCount(window);
+        double bucketWidth = trackWidth / bucketCount;
+        DateTimeOffset fromUtc = window.FromUtc;
+
+        IReadOnlyList<string> appNames = BuildAppNames(timelineRows);
+        var rows = new List<StateLaneLayout>(appNames.Count);
+
+        foreach (string appName in appNames)
+        {
+            var accumulator = new SegmentAccumulator();
+            double laneTotalSeconds = 0;
+
+            Dictionary<int, Dictionary<string, double>> byBucket = timelineRows
+                .Where(x => string.Equals(x.ExeName, appName, StringComparison.OrdinalIgnoreCase))
+                .Select(x => new
+                {
+                    x.State,
+                    BucketIndex = ToBucketIndex(x.BucketStartUtc, fromUtc, window.BucketSeconds),
+                    x.Seconds
+                })
+                .Where(x => x.BucketIndex >= 0 && x.BucketIndex < bucketCount)
+                .GroupBy(x => x.BucketIndex)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.GroupBy(v => v.State, StringComparer.OrdinalIgnoreCase)
+                        .ToDictionary(v => v.Key, v => v.Sum(t => t.Seconds), StringComparer.OrdinalIgnoreCase));
+
+            for (int bucketIndex = 0; bucketIndex < bucketCount; bucketIndex++)
+            {
+                DateTimeOffset bucketStart = window.FromUtc.AddSeconds((long)bucketIndex * window.BucketSeconds);
+                DateTimeOffset bucketEnd = bucketStart.AddSeconds(window.BucketSeconds);
+
+                if (!byBucket.TryGetValue(bucketIndex, out Dictionary<string, double>? byState))
+                {
+                    accumulator.AddNoData(bucketWidth);
+                    continue;
+                }
+
+                double activeSeconds = Math.Min((double)window.BucketSeconds, byState.GetValueOrDefault("Active", 0));
+                double openSeconds = Math.Min((double)window.BucketSeconds, byState.GetValueOrDefault("Open", 0));
+                double minimizedSeconds = Math.Min((double)window.BucketSeconds, byState.GetValueOrDefault("Minimized", 0));
+                double rawHourSeconds = activeSeconds + openSeconds + minimizedSeconds;
+                double occupiedSeconds = Math.Min((double)window.BucketSeconds, rawHourSeconds);
+                laneTotalSeconds += occupiedSeconds;
+
+                if (occupiedSeconds <= 0)
+                {
+                    accumulator.AddNoData(bucketWidth);
+                    continue;
+                }
+
+                double scale = rawHourSeconds > 0 ? occupiedSeconds / rawHourSeconds : 0;
+                double occupiedWidth = 0;
+                DateTimeOffset localStart = bucketStart.ToLocalTime();
+                DateTimeOffset localEnd = bucketEnd.ToLocalTime();
+
+                occupiedWidth += AddDailyStateSegmentForApp(
+                    accumulator,
+                    appName,
+                    "Active",
+                    activeSeconds,
+                    window.BucketSeconds,
+                    ActiveColorHex,
+                    bucketWidth,
+                    scale,
+                    localStart,
+                    localEnd);
+                occupiedWidth += AddDailyStateSegmentForApp(
+                    accumulator,
+                    appName,
+                    "Open",
+                    openSeconds,
+                    window.BucketSeconds,
+                    OpenColorHex,
+                    bucketWidth,
+                    scale,
+                    localStart,
+                    localEnd);
+                occupiedWidth += AddDailyStateSegmentForApp(
+                    accumulator,
+                    appName,
+                    "Minimized",
+                    minimizedSeconds,
+                    window.BucketSeconds,
+                    MinimizedColorHex,
+                    bucketWidth,
+                    scale,
+                    localStart,
+                    localEnd);
+
+                double gapWidth = Math.Max(0, bucketWidth - occupiedWidth);
+                if (gapWidth > 0)
+                {
+                    accumulator.AddNoData(gapWidth);
+                }
+            }
+
+            rows.Add(new StateLaneLayout(
+                appName,
+                ToDuration(laneTotalSeconds),
+                accumulator.Build()));
+        }
+
+        return rows;
+    }
+
+    public IReadOnlyList<StateStackRowLayout> BuildDailyStateStackRows(
+        IReadOnlyList<TimelineUsageRow> timelineRows,
+        UsageQueryWindow window,
+        double trackWidth)
+    {
+        int bucketCount = CalculateBucketCount(window);
+        double bucketWidth = trackWidth / bucketCount;
+        DateTimeOffset fromUtc = window.FromUtc;
+        var byBucket = timelineRows
+            .Select(x => new
+            {
+                BucketIndex = ToBucketIndex(x.BucketStartUtc, fromUtc, window.BucketSeconds),
+                x.ExeName,
+                x.Seconds
+            })
+            .Where(x => x.BucketIndex >= 0 && x.BucketIndex < bucketCount)
+            .GroupBy(x => x.BucketIndex)
+            .ToDictionary(
+                g => g.Key,
+                g => g.GroupBy(v => v.ExeName, StringComparer.OrdinalIgnoreCase)
+                    .Select(v => new AppUsage(
+                        v.Key,
+                        Math.Min((double)window.BucketSeconds, v.Sum(t => t.Seconds)),
+                        ColorForKey(v.Key)))
+                    .Where(v => v.Seconds > 0)
+                    .OrderByDescending(v => v.Seconds)
+                    .ThenBy(v => v.ExeName, StringComparer.OrdinalIgnoreCase)
+                    .ToList());
+
+        var accumulator = new StateStackAccumulator("Running");
+        double totalSeconds = 0;
+
+        for (int bucketIndex = 0; bucketIndex < bucketCount; bucketIndex++)
+        {
+            DateTimeOffset bucketStartUtc = window.FromUtc.AddSeconds((long)bucketIndex * window.BucketSeconds);
+            DateTimeOffset bucketEndUtc = bucketStartUtc.AddSeconds(window.BucketSeconds);
+
+            if (!byBucket.TryGetValue(bucketIndex, out List<AppUsage>? apps) || apps.Count == 0)
+            {
+                accumulator.AddNoData(bucketWidth);
+                continue;
+            }
+
+            double occupiedSeconds = Math.Min((double)window.BucketSeconds, apps.Sum(x => x.Seconds));
+            totalSeconds += occupiedSeconds;
+            if (occupiedSeconds <= 0)
+            {
+                accumulator.AddNoData(bucketWidth);
+                continue;
+            }
+
+            accumulator.AddData(
+                bucketWidth,
+                apps,
+                bucketStartUtc.ToLocalTime(),
+                bucketEndUtc.ToLocalTime());
+        }
+
+        return
+        [
+            new StateStackRowLayout(
+                "Running",
+                ToDuration(totalSeconds),
+                accumulator.Build())
+        ];
+    }
+
     public IReadOnlyList<TimelineRowLayout> BuildOverviewRows(
         IReadOnlyList<TimelineUsageRow> timelineRows,
         UsageQueryWindow window,
@@ -462,6 +806,28 @@ public sealed class TimelineLayoutBuilder
         return $"#{r:X2}{g:X2}{b:X2}";
     }
 
+    private static int CalculateBucketCount(UsageQueryWindow window)
+    {
+        if (window.BucketSeconds <= 0)
+        {
+            return 1;
+        }
+
+        double totalSeconds = Math.Max(0, (window.ToUtc - window.FromUtc).TotalSeconds);
+        return Math.Max(1, (int)Math.Ceiling(totalSeconds / window.BucketSeconds));
+    }
+
+    private static int ToBucketIndex(DateTimeOffset bucketStartUtc, DateTimeOffset fromUtc, int bucketSeconds)
+    {
+        if (bucketSeconds <= 0)
+        {
+            return 0;
+        }
+
+        double elapsedSeconds = (bucketStartUtc - fromUtc).TotalSeconds;
+        return (int)Math.Floor(elapsedSeconds / bucketSeconds);
+    }
+
     private static void AddNoDataSegment(ICollection<SegmentLayout> segments, double width)
     {
         segments.Add(new SegmentLayout(
@@ -496,6 +862,323 @@ public sealed class TimelineLayoutBuilder
             $"{state} {ToDuration(seconds)} ({seconds:F0}s)",
             colorHex));
         return width;
+    }
+
+    private static double AddDailyStateSegmentForApp(
+        SegmentAccumulator accumulator,
+        string appName,
+        string state,
+        double seconds,
+        int bucketSeconds,
+        string colorHex,
+        double hourWidth,
+        double scale,
+        DateTimeOffset localStart,
+        DateTimeOffset localEnd)
+    {
+        if (seconds <= 0 || bucketSeconds <= 0 || hourWidth <= 0 || scale <= 0)
+        {
+            return 0;
+        }
+
+        double width = hourWidth * (seconds / bucketSeconds) * scale;
+        if (width <= 0)
+        {
+            return 0;
+        }
+
+        accumulator.AddData(
+            width,
+            colorHex,
+            $"{appName}|{state}",
+            $"{appName} | {state}",
+            localStart,
+            localEnd,
+            seconds);
+        return width;
+    }
+
+    private sealed class SegmentAccumulator
+    {
+        private readonly List<PendingSegment> _segments = [];
+
+        public void AddNoData(double width)
+        {
+            if (width <= 0)
+            {
+                return;
+            }
+
+            if (_segments.Count > 0 && _segments[^1].IsNoData)
+            {
+                PendingSegment merged = _segments[^1];
+                merged.Width += width;
+                _segments[^1] = merged;
+                return;
+            }
+
+            _segments.Add(PendingSegment.CreateNoData(width));
+        }
+
+        public void AddData(
+            double width,
+            string colorHex,
+            string mergeKey,
+            string tooltipPrefix,
+            DateTimeOffset localStart,
+            DateTimeOffset localEnd,
+            double seconds)
+        {
+            if (width <= 0)
+            {
+                return;
+            }
+
+            if (_segments.Count > 0)
+            {
+                PendingSegment last = _segments[^1];
+                if (!last.IsNoData &&
+                    string.Equals(last.MergeKey, mergeKey, StringComparison.Ordinal) &&
+                    last.LocalEnd == localStart)
+                {
+                    last.Width += width;
+                    last.LocalEnd = localEnd;
+                    last.Seconds += seconds;
+                    _segments[^1] = last;
+                    return;
+                }
+            }
+
+            _segments.Add(PendingSegment.CreateData(width, colorHex, mergeKey, tooltipPrefix, localStart, localEnd, seconds));
+        }
+
+        public IReadOnlyList<SegmentLayout> Build()
+        {
+            var result = new List<SegmentLayout>(_segments.Count);
+            foreach (PendingSegment segment in _segments)
+            {
+                if (segment.IsNoData)
+                {
+                    result.Add(new SegmentLayout(
+                        segment.Width,
+                        NoDataTooltip,
+                        string.Empty,
+                        IsNoData: true));
+                    continue;
+                }
+
+                string tooltip = $"{segment.TooltipPrefix} | {segment.LocalStart:HH\\:mm}-{segment.LocalEnd:HH\\:mm} | {ToDuration(segment.Seconds)}";
+                result.Add(new SegmentLayout(
+                    segment.Width,
+                    tooltip,
+                    segment.ColorHex));
+            }
+
+            return result;
+        }
+
+        private struct PendingSegment
+        {
+            public bool IsNoData { get; init; }
+            public double Width { get; set; }
+            public string ColorHex { get; init; }
+            public string MergeKey { get; init; }
+            public string TooltipPrefix { get; init; }
+            public DateTimeOffset LocalStart { get; init; }
+            public DateTimeOffset LocalEnd { get; set; }
+            public double Seconds { get; set; }
+
+            public static PendingSegment CreateNoData(double width) =>
+                new()
+                {
+                    IsNoData = true,
+                    Width = width,
+                    ColorHex = string.Empty,
+                    MergeKey = string.Empty,
+                    TooltipPrefix = string.Empty
+                };
+
+            public static PendingSegment CreateData(
+                double width,
+                string colorHex,
+                string mergeKey,
+                string tooltipPrefix,
+                DateTimeOffset localStart,
+                DateTimeOffset localEnd,
+                double seconds) =>
+                new()
+                {
+                    IsNoData = false,
+                    Width = width,
+                    ColorHex = colorHex,
+                    MergeKey = mergeKey,
+                    TooltipPrefix = tooltipPrefix,
+                    LocalStart = localStart,
+                    LocalEnd = localEnd,
+                    Seconds = seconds
+                };
+        }
+    }
+
+    private readonly record struct AppUsage(string ExeName, double Seconds, string ColorHex);
+
+    private sealed class StateStackAccumulator
+    {
+        private readonly string _state;
+        private readonly List<PendingStackColumn> _columns = [];
+
+        public StateStackAccumulator(string state)
+        {
+            _state = state;
+        }
+
+        public void AddNoData(double width)
+        {
+            if (width <= 0)
+            {
+                return;
+            }
+
+            if (_columns.Count > 0 && _columns[^1].IsNoData)
+            {
+                PendingStackColumn merged = _columns[^1];
+                merged.Width += width;
+                _columns[^1] = merged;
+                return;
+            }
+
+            _columns.Add(PendingStackColumn.CreateNoData(width));
+        }
+
+        public void AddData(
+            double width,
+            IReadOnlyList<AppUsage> apps,
+            DateTimeOffset localStart,
+            DateTimeOffset localEnd)
+        {
+            if (width <= 0 || apps.Count == 0)
+            {
+                return;
+            }
+
+            string key = string.Join('\u001f', apps.Select(x => x.ExeName));
+            if (_columns.Count > 0)
+            {
+                PendingStackColumn last = _columns[^1];
+                if (!last.IsNoData &&
+                    string.Equals(last.Key, key, StringComparison.Ordinal) &&
+                    last.LocalEnd == localStart)
+                {
+                    last.Width += width;
+                    last.LocalEnd = localEnd;
+                    foreach (AppUsage app in apps)
+                    {
+                        last.SecondsByApp[app.ExeName] = last.SecondsByApp.GetValueOrDefault(app.ExeName, 0) + app.Seconds;
+                    }
+
+                    _columns[^1] = last;
+                    return;
+                }
+            }
+
+            var secondsByApp = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            var colorByApp = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var appOrder = new List<string>(apps.Count);
+            foreach (AppUsage app in apps)
+            {
+                appOrder.Add(app.ExeName);
+                secondsByApp[app.ExeName] = app.Seconds;
+                colorByApp[app.ExeName] = app.ColorHex;
+            }
+
+            _columns.Add(PendingStackColumn.CreateData(
+                width,
+                key,
+                appOrder,
+                secondsByApp,
+                colorByApp,
+                localStart,
+                localEnd));
+        }
+
+        public IReadOnlyList<StackedColumnLayout> Build()
+        {
+            var result = new List<StackedColumnLayout>(_columns.Count);
+            foreach (PendingStackColumn column in _columns)
+            {
+                if (column.IsNoData)
+                {
+                    result.Add(new StackedColumnLayout(
+                        column.Width,
+                        true,
+                        []));
+                    continue;
+                }
+
+                var entries = new List<StackedEntryLayout>(column.AppOrder.Count);
+                foreach (string app in column.AppOrder)
+                {
+                    double seconds = column.SecondsByApp.GetValueOrDefault(app, 0);
+                    string tooltip = $"{_state} | {app} | {column.LocalStart:HH\\:mm}-{column.LocalEnd:HH\\:mm} | {ToDuration(seconds)}";
+                    entries.Add(new StackedEntryLayout(
+                        app,
+                        column.ColorByApp.GetValueOrDefault(app, OtherColorHex),
+                        tooltip));
+                }
+
+                result.Add(new StackedColumnLayout(
+                    column.Width,
+                    false,
+                    entries));
+            }
+
+            return result;
+        }
+
+        private struct PendingStackColumn
+        {
+            public bool IsNoData { get; set; }
+            public double Width { get; set; }
+            public string Key { get; set; }
+            public IReadOnlyList<string> AppOrder { get; set; }
+            public Dictionary<string, double> SecondsByApp { get; set; }
+            public Dictionary<string, string> ColorByApp { get; set; }
+            public DateTimeOffset LocalStart { get; set; }
+            public DateTimeOffset LocalEnd { get; set; }
+
+            public static PendingStackColumn CreateNoData(double width) =>
+                new()
+                {
+                    IsNoData = true,
+                    Width = width,
+                    Key = string.Empty,
+                    AppOrder = [],
+                    SecondsByApp = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase),
+                    ColorByApp = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                    LocalStart = default,
+                    LocalEnd = default
+                };
+
+            public static PendingStackColumn CreateData(
+                double width,
+                string key,
+                IReadOnlyList<string> appOrder,
+                Dictionary<string, double> secondsByApp,
+                Dictionary<string, string> colorByApp,
+                DateTimeOffset localStart,
+                DateTimeOffset localEnd) =>
+                new()
+                {
+                    IsNoData = false,
+                    Width = width,
+                    Key = key,
+                    AppOrder = appOrder,
+                    SecondsByApp = secondsByApp,
+                    ColorByApp = colorByApp,
+                    LocalStart = localStart,
+                    LocalEnd = localEnd
+                };
+        }
     }
 
     private static string FormatBucketLabel(DateTimeOffset bucketStartUtc, DateTimeOffset bucketEndUtc)

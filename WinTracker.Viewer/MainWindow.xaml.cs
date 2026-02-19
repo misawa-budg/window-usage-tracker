@@ -30,7 +30,7 @@ public sealed partial class MainWindow : Window
         new(Windows.UI.Color.FromArgb(0, 0, 0, 0));
 
     private readonly ObservableCollection<TimelineRowViewModel> _overviewRows = [];
-    private readonly ObservableCollection<StateLaneViewModel> _overviewDailyLanes = [];
+    private readonly ObservableCollection<StateStackRowViewModel> _overviewDailyRows = [];
     private readonly ObservableCollection<StateLaneViewModel> _appDailyLanes = [];
     private readonly ObservableCollection<TimelineRowViewModel> _appRows = [];
     private readonly ObservableCollection<string> _appNames = [];
@@ -51,7 +51,7 @@ public sealed partial class MainWindow : Window
         UpdateTimeTickLabels();
 
         OverviewListView.ItemsSource = _overviewRows;
-        OverviewDailyListView.ItemsSource = _overviewDailyLanes;
+        OverviewDailyListView.ItemsSource = _overviewDailyRows;
         AppDailyListView.ItemsSource = _appDailyLanes;
         AppTimelineListView.ItemsSource = _appRows;
         AppComboBox.ItemsSource = _appNames;
@@ -153,13 +153,7 @@ public sealed partial class MainWindow : Window
 
     private void OnAppSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        RebuildAppLegend();
-
-        if (GetRangeLabel() == "24h")
-        {
-            BuildAppDailyLanes();
-        }
-        else
+        if (GetRangeLabel() == "1week")
         {
             BuildAppTimelineRows();
         }
@@ -193,27 +187,21 @@ public sealed partial class MainWindow : Window
             if (GetRangeLabel() == "24h")
             {
                 SetOverviewMode(isDaily24h: true);
-                BuildDailyOverviewLanes();
+                BuildDailyOverviewRows();
                 SetAppMode(isDaily24h: true);
+                BuildAppDailyRows();
             }
             else
             {
                 SetOverviewMode(isDaily24h: false);
                 BuildOverviewRows();
                 SetAppMode(isDaily24h: false);
-            }
-
-            RebuildAppNames();
-            RebuildOverviewLegend();
-            RebuildAppLegend();
-            if (GetRangeLabel() == "24h")
-            {
-                BuildAppDailyLanes();
-            }
-            else
-            {
+                RebuildAppNames();
                 BuildAppTimelineRows();
             }
+
+            RebuildOverviewLegend();
+            RebuildAppLegend();
 
             StatusTextBlock.Text = $"Loaded: {GetRangeLabel()} / events={_timelineRows.Count}";
         }
@@ -243,12 +231,13 @@ public sealed partial class MainWindow : Window
         }
         else
         {
-            _overviewDailyLanes.Clear();
+            _overviewDailyRows.Clear();
         }
     }
 
     private void SetAppMode(bool isDaily24h)
     {
+        AppSelectorCard.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
         AppDailyPanel.Visibility = isDaily24h ? Visibility.Visible : Visibility.Collapsed;
         AppWeekHeader.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
         AppTimelineListView.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
@@ -279,7 +268,7 @@ public sealed partial class MainWindow : Window
         return new UsageQueryWindow(
             dayStartLocal.ToUniversalTime(),
             dayEndLocal.ToUniversalTime(),
-            TimeSpan.FromHours(1));
+            TimeSpan.FromMinutes(1));
     }
 
     private static UsageQueryWindow CreateLocalWeekWindow()
@@ -302,21 +291,42 @@ public sealed partial class MainWindow : Window
             : Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, candidate));
     }
 
-    private void BuildDailyOverviewLanes()
+    private void BuildDailyOverviewRows()
     {
-        _overviewDailyLanes.Clear();
-        IReadOnlyList<StateLaneLayout> lanes = _layoutBuilder.BuildDailyOverviewLanes(
+        _overviewDailyRows.Clear();
+        IReadOnlyList<StateStackRowLayout> rows = _layoutBuilder.BuildDailyStateStackRows(
             _timelineRows,
             _currentWindow,
             DailyTrackWidth);
 
-        foreach (StateLaneLayout lane in lanes)
+        foreach (StateStackRowLayout row in rows)
         {
-            _overviewDailyLanes.Add(new StateLaneViewModel(
-                lane.Label,
-                lane.TotalLabel,
-                lane.Segments.Select(ToAbsoluteSegmentViewModel).ToList()));
+            _overviewDailyRows.Add(new StateStackRowViewModel(
+                row.Label,
+                row.TotalLabel,
+                row.Columns.Select(column =>
+                    new StackedColumnViewModel(
+                        column.Width,
+                        column.IsNoData,
+                        ToStackedEntries(column)))
+                    .ToList()));
         }
+    }
+
+    private static IReadOnlyList<StackedEntryViewModel> ToStackedEntries(StackedColumnLayout column)
+    {
+        if (column.Entries.Count == 0)
+        {
+            return [];
+        }
+
+        double entryHeight = 46.0 / column.Entries.Count;
+        return column.Entries.Select(entry =>
+            new StackedEntryViewModel(
+                entryHeight,
+                CreateBrush(entry.ColorHex),
+                entry.Tooltip))
+            .ToList();
     }
 
     private void RebuildAppNames()
@@ -410,18 +420,12 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void BuildAppDailyLanes()
+    private void BuildAppDailyRows()
     {
         _appDailyLanes.Clear();
-        string? app = AppComboBox.SelectedItem as string;
-        if (string.IsNullOrWhiteSpace(app))
-        {
-            return;
-        }
-        IReadOnlyList<StateLaneLayout> lanes = _layoutBuilder.BuildAppDailyLanes(
+        IReadOnlyList<StateLaneLayout> lanes = _layoutBuilder.BuildDailyAppRows(
             _timelineRows,
             _currentWindow,
-            app,
             DailyTrackWidth);
 
         foreach (StateLaneLayout lane in lanes)
@@ -461,7 +465,7 @@ public sealed partial class MainWindow : Window
     private void ClearRows()
     {
         _overviewRows.Clear();
-        _overviewDailyLanes.Clear();
+        _overviewDailyRows.Clear();
         _appDailyLanes.Clear();
         _appRows.Clear();
         _appNames.Clear();

@@ -33,6 +33,80 @@ public sealed class TimelineLayoutBuilderTests
     }
 
     [Fact]
+    public void BuildDailyStateGroups_ReturnsThreeGroups_WithTopAppLanes()
+    {
+        var builder = new TimelineLayoutBuilder(topAppCount: 2);
+        UsageQueryWindow window = Create24HourWindow(Utc(2026, 2, 19, 0, 0, 0));
+        IReadOnlyList<TimelineUsageRow> rows =
+        [
+            Row(2026, 2, 19, 9, "devenv.exe", "Active", 3600),
+            Row(2026, 2, 19, 10, "msedge.exe", "Active", 1800),
+            Row(2026, 2, 19, 10, "powershell.exe", "Active", 900),
+            Row(2026, 2, 19, 11, "msedge.exe", "Open", 1200),
+            Row(2026, 2, 19, 12, "powershell.exe", "Minimized", 2400)
+        ];
+
+        IReadOnlyList<StateGroupLayout> groups = builder.BuildDailyStateGroups(rows, window, trackWidth: 960);
+
+        Assert.Equal(3, groups.Count);
+        foreach (StateGroupLayout group in groups)
+        {
+            Assert.NotEmpty(group.Label);
+            Assert.True(ParseDuration(group.TotalLabel) >= TimeSpan.Zero);
+            foreach (StateLaneLayout lane in group.Lanes)
+            {
+                AssertApproximately(lane.Segments.Sum(x => x.Width), 960);
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildDailyStateStackRows_ReturnsSingleRunningRow_AndSplitsConcurrentApps()
+    {
+        var builder = new TimelineLayoutBuilder();
+        UsageQueryWindow window = new(
+            Utc(2026, 2, 19, 0, 0, 0),
+            Utc(2026, 2, 20, 0, 0, 0),
+            TimeSpan.FromMinutes(1));
+
+        IReadOnlyList<TimelineUsageRow> rows =
+        [
+            new(Utc(2026, 2, 19, 0, 10, 0), "devenv.exe", "Active", 60),
+            new(Utc(2026, 2, 19, 0, 10, 0), "powershell.exe", "Active", 60),
+            new(Utc(2026, 2, 19, 0, 11, 0), "devenv.exe", "Active", 60)
+        ];
+
+        IReadOnlyList<StateStackRowLayout> result = builder.BuildDailyStateStackRows(rows, window, trackWidth: 960);
+        StateStackRowLayout running = Assert.Single(result);
+        Assert.Equal("Running", running.Label);
+        AssertApproximately(running.Columns.Sum(x => x.Width), 960);
+        Assert.Contains(running.Columns, x => x.Entries.Count == 2);
+        Assert.Contains(running.Columns, x => x.Entries.Count == 1);
+    }
+
+    [Fact]
+    public void BuildDailyStateStackRows_NormalizesSameAppAcrossStatesWithinSameBucket()
+    {
+        var builder = new TimelineLayoutBuilder();
+        UsageQueryWindow window = new(
+            Utc(2026, 2, 19, 0, 0, 0),
+            Utc(2026, 2, 20, 0, 0, 0),
+            TimeSpan.FromMinutes(1));
+
+        IReadOnlyList<TimelineUsageRow> rows =
+        [
+            new(Utc(2026, 2, 19, 0, 10, 0), "devenv.exe", "Active", 30),
+            new(Utc(2026, 2, 19, 0, 10, 0), "devenv.exe", "Open", 30)
+        ];
+
+        IReadOnlyList<StateStackRowLayout> result = builder.BuildDailyStateStackRows(rows, window, trackWidth: 960);
+        StateStackRowLayout running = Assert.Single(result);
+        StackedColumnLayout column = Assert.Single(running.Columns, x => !x.IsNoData);
+        StackedEntryLayout entry = Assert.Single(column.Entries);
+        Assert.Contains("devenv.exe", entry.Tooltip);
+    }
+
+    [Fact]
     public void BuildOverviewRows_ForWeek_ReturnsSevenDayRows_WithCappedTotals()
     {
         var builder = new TimelineLayoutBuilder();
@@ -94,6 +168,86 @@ public sealed class TimelineLayoutBuilderTests
                 Assert.Contains(segment.ColorHex, expectedColors);
             }
         }
+    }
+
+    [Fact]
+    public void BuildDailyAppRows_ReturnsRowsPerApp_WithStateColors()
+    {
+        var builder = new TimelineLayoutBuilder();
+        UsageQueryWindow window = Create24HourWindow(Utc(2026, 2, 19, 0, 0, 0));
+        IReadOnlyList<TimelineUsageRow> rows =
+        [
+            Row(2026, 2, 19, 8, "devenv.exe", "Active", 2400),
+            Row(2026, 2, 19, 8, "devenv.exe", "Open", 1200),
+            Row(2026, 2, 19, 9, "powershell.exe", "Open", 1800),
+            Row(2026, 2, 19, 10, "powershell.exe", "Minimized", 600)
+        ];
+
+        IReadOnlyList<StateLaneLayout> result = builder.BuildDailyAppRows(rows, window, trackWidth: 960);
+
+        Assert.Equal(2, result.Count);
+        HashSet<string> expectedColors =
+        [
+            TimelineLayoutBuilder.ActiveColorHex,
+            TimelineLayoutBuilder.OpenColorHex,
+            TimelineLayoutBuilder.MinimizedColorHex
+        ];
+
+        foreach (StateLaneLayout row in result)
+        {
+            AssertApproximately(row.Segments.Sum(x => x.Width), 960);
+            foreach (SegmentLayout segment in row.Segments.Where(x => !x.IsNoData))
+            {
+                Assert.Contains(segment.ColorHex, expectedColors);
+            }
+        }
+    }
+
+    [Fact]
+    public void BuildDailyAppRows_WithMinuteBuckets_DoesNotCollapseIntoHourlyIndex()
+    {
+        var builder = new TimelineLayoutBuilder();
+        UsageQueryWindow window = new(
+            Utc(2026, 2, 19, 0, 0, 0),
+            Utc(2026, 2, 20, 0, 0, 0),
+            TimeSpan.FromMinutes(1));
+
+        IReadOnlyList<TimelineUsageRow> rows =
+        [
+            new(Utc(2026, 2, 19, 0, 1, 0), "devenv.exe", "Active", 60),
+            new(Utc(2026, 2, 19, 0, 59, 0), "devenv.exe", "Active", 60)
+        ];
+
+        IReadOnlyList<StateLaneLayout> result = builder.BuildDailyAppRows(rows, window, trackWidth: 960);
+        StateLaneLayout lane = Assert.Single(result);
+        int nonNoDataCount = lane.Segments.Count(x => !x.IsNoData);
+
+        Assert.Equal(2, nonNoDataCount);
+        AssertApproximately(lane.Segments.Sum(x => x.Width), 960);
+    }
+
+    [Fact]
+    public void BuildDailyAppRows_WithMinuteBuckets_MergesContiguousSameStateSegments()
+    {
+        var builder = new TimelineLayoutBuilder();
+        UsageQueryWindow window = new(
+            Utc(2026, 2, 19, 0, 0, 0),
+            Utc(2026, 2, 20, 0, 0, 0),
+            TimeSpan.FromMinutes(1));
+
+        IReadOnlyList<TimelineUsageRow> rows =
+        [
+            new(Utc(2026, 2, 19, 0, 1, 0), "devenv.exe", "Active", 60),
+            new(Utc(2026, 2, 19, 0, 2, 0), "devenv.exe", "Active", 60),
+            new(Utc(2026, 2, 19, 0, 3, 0), "devenv.exe", "Active", 60)
+        ];
+
+        IReadOnlyList<StateLaneLayout> result = builder.BuildDailyAppRows(rows, window, trackWidth: 960);
+        StateLaneLayout lane = Assert.Single(result);
+        int nonNoDataCount = lane.Segments.Count(x => !x.IsNoData);
+
+        Assert.Equal(1, nonNoDataCount);
+        AssertApproximately(lane.Segments.Sum(x => x.Width), 960);
     }
 
     [Fact]
