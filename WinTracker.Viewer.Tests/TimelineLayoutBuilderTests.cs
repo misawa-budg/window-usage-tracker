@@ -134,7 +134,7 @@ public sealed class TimelineLayoutBuilderTests
     }
 
     [Fact]
-    public void BuildAppTimelineRows_UsesStateColors_AndKeepsTrackWidth()
+    public void BuildAppTimelineRows_UsesAppToneColors_AndKeepsTrackWidth()
     {
         var builder = new TimelineLayoutBuilder();
         UsageQueryWindow window = CreateWeekWindow(Utc(2026, 2, 13, 0, 0, 0));
@@ -153,9 +153,9 @@ public sealed class TimelineLayoutBuilderTests
         Assert.Equal(7, result.Count);
         HashSet<string> expectedColors =
         [
-            TimelineLayoutBuilder.ActiveColorHex,
-            TimelineLayoutBuilder.OpenColorHex,
-            TimelineLayoutBuilder.MinimizedColorHex
+            TimelineLayoutBuilder.ColorForAppState("devenv.exe", "Active"),
+            TimelineLayoutBuilder.ColorForAppState("devenv.exe", "Open"),
+            TimelineLayoutBuilder.ColorForAppState("devenv.exe", "Minimized")
         ];
 
         foreach (TimelineRowLayout row in result)
@@ -171,7 +171,7 @@ public sealed class TimelineLayoutBuilderTests
     }
 
     [Fact]
-    public void BuildDailyAppRows_ReturnsRowsPerApp_WithStateColors()
+    public void BuildDailyAppRows_ReturnsRowsPerApp_WithAppToneColors()
     {
         var builder = new TimelineLayoutBuilder();
         UsageQueryWindow window = Create24HourWindow(Utc(2026, 2, 19, 0, 0, 0));
@@ -186,15 +186,15 @@ public sealed class TimelineLayoutBuilderTests
         IReadOnlyList<StateLaneLayout> result = builder.BuildDailyAppRows(rows, window, trackWidth: 960);
 
         Assert.Equal(2, result.Count);
-        HashSet<string> expectedColors =
-        [
-            TimelineLayoutBuilder.ActiveColorHex,
-            TimelineLayoutBuilder.OpenColorHex,
-            TimelineLayoutBuilder.MinimizedColorHex
-        ];
-
         foreach (StateLaneLayout row in result)
         {
+            HashSet<string> expectedColors =
+            [
+                TimelineLayoutBuilder.ColorForAppState(row.Label, "Active"),
+                TimelineLayoutBuilder.ColorForAppState(row.Label, "Open"),
+                TimelineLayoutBuilder.ColorForAppState(row.Label, "Minimized")
+            ];
+
             AssertApproximately(row.Segments.Sum(x => x.Width), 960);
             foreach (SegmentLayout segment in row.Segments.Where(x => !x.IsNoData))
             {
@@ -251,7 +251,7 @@ public sealed class TimelineLayoutBuilderTests
     }
 
     [Fact]
-    public void BuildAppDailyLanes_UsesSingleAppColorAcrossStates()
+    public void BuildAppDailyLanes_UsesAppToneColorPerState()
     {
         var builder = new TimelineLayoutBuilder();
         UsageQueryWindow window = Create24HourWindow(Utc(2026, 2, 19, 0, 0, 0));
@@ -265,10 +265,10 @@ public sealed class TimelineLayoutBuilderTests
         ];
 
         IReadOnlyList<StateLaneLayout> lanes = builder.BuildAppDailyLanes(rows, window, app, trackWidth: 960);
-        string expectedColor = TimelineLayoutBuilder.ColorForKey(app);
 
         foreach (StateLaneLayout lane in lanes)
         {
+            string expectedColor = TimelineLayoutBuilder.ColorForAppState(app, lane.Label);
             AssertApproximately(lane.Segments.Sum(x => x.Width), 960);
             foreach (SegmentLayout segment in lane.Segments.Where(x => !x.IsNoData))
             {

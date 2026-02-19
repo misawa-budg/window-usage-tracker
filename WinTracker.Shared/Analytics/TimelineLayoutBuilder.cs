@@ -5,9 +5,9 @@ public sealed class TimelineLayoutBuilder
     public const string NoDataTooltip = "No data";
     public const string OtherLabel = "Other";
     public const string OtherColorHex = "#F8B5B5";
-    public const string ActiveColorHex = "#BFA8FF";
-    public const string OpenColorHex = "#B8E9C7";
-    public const string MinimizedColorHex = "#F9E6A6";
+    public const string ActiveColorHex = "#8FADEB";
+    public const string OpenColorHex = "#B7CAF3";
+    public const string MinimizedColorHex = "#DFE7FA";
     private const double MinVisibleSeconds = 300.0;
 
     private static readonly string[] AppStates = ["Active", "Open", "Minimized"];
@@ -351,6 +351,9 @@ public sealed class TimelineLayoutBuilder
 
         foreach (string appName in appNames)
         {
+            string appActiveColor = ColorForAppState(appName, "Active");
+            string appOpenColor = ColorForAppState(appName, "Open");
+            string appMinimizedColor = ColorForAppState(appName, "Minimized");
             var accumulator = new SegmentAccumulator();
             double laneTotalSeconds = 0;
 
@@ -403,7 +406,7 @@ public sealed class TimelineLayoutBuilder
                     "Active",
                     activeSeconds,
                     rawHourSeconds,
-                    ActiveColorHex,
+                    appActiveColor,
                     bucketWidth,
                     localStart,
                     localEnd);
@@ -413,7 +416,7 @@ public sealed class TimelineLayoutBuilder
                     "Open",
                     openSeconds,
                     rawHourSeconds,
-                    OpenColorHex,
+                    appOpenColor,
                     bucketWidth,
                     localStart,
                     localEnd);
@@ -423,7 +426,7 @@ public sealed class TimelineLayoutBuilder
                     "Minimized",
                     minimizedSeconds,
                     rawHourSeconds,
-                    MinimizedColorHex,
+                    appMinimizedColor,
                     bucketWidth,
                     localStart,
                     localEnd);
@@ -640,6 +643,9 @@ public sealed class TimelineLayoutBuilder
             return [];
         }
 
+        string appActiveColor = ColorForAppState(appName, "Active");
+        string appOpenColor = ColorForAppState(appName, "Open");
+        string appMinimizedColor = ColorForAppState(appName, "Minimized");
         var rows = new List<TimelineRowLayout>();
 
         foreach (DateTimeOffset dayStart in EnumerateDayBuckets(window))
@@ -692,7 +698,7 @@ public sealed class TimelineLayoutBuilder
                     "Active",
                     activeSeconds,
                     window.BucketSeconds,
-                    ActiveColorHex,
+                    appActiveColor,
                     hourWidth,
                     scale);
                 occupiedWidth += AddStateSegment(
@@ -700,7 +706,7 @@ public sealed class TimelineLayoutBuilder
                     "Open",
                     openSeconds,
                     window.BucketSeconds,
-                    OpenColorHex,
+                    appOpenColor,
                     hourWidth,
                     scale);
                 occupiedWidth += AddStateSegment(
@@ -708,7 +714,7 @@ public sealed class TimelineLayoutBuilder
                     "Minimized",
                     minimizedSeconds,
                     window.BucketSeconds,
-                    MinimizedColorHex,
+                    appMinimizedColor,
                     hourWidth,
                     scale);
 
@@ -798,7 +804,7 @@ public sealed class TimelineLayoutBuilder
                 segments.Add(new SegmentLayout(
                     width,
                     $"{state} | {appName} | {localStart:HH\\:mm}-{localEnd:HH\\:mm} | {ToDuration(occupiedSeconds)}",
-                    ColorForKey(appName)));
+                    ColorForAppState(appName, state)));
 
                 double gapWidth = Math.Max(0, hourWidth - width);
                 if (gapWidth > 0)
@@ -824,6 +830,12 @@ public sealed class TimelineLayoutBuilder
         double lightness = 0.56 + (((hash >> 16) % 11) / 100.0);
         (byte r, byte g, byte b) = HslToRgb(hue / 360.0, saturation, lightness);
         return $"#{r:X2}{g:X2}{b:X2}";
+    }
+
+    public static string ColorForAppState(string appName, string state)
+    {
+        string appColor = ColorForKey(appName);
+        return ColorForStateTone(appColor, state);
     }
 
     private static int CalculateBucketCount(UsageQueryWindow window)
@@ -1250,6 +1262,61 @@ public sealed class TimelineLayoutBuilder
 
         return hash;
     }
+
+    private static string ColorForStateTone(string baseColorHex, string state)
+    {
+        if (string.Equals(state, "Open", StringComparison.OrdinalIgnoreCase))
+        {
+            return BlendWithWhite(baseColorHex, 0.30);
+        }
+
+        if (string.Equals(state, "Minimized", StringComparison.OrdinalIgnoreCase))
+        {
+            return BlendWithWhite(baseColorHex, 0.70);
+        }
+
+        return baseColorHex;
+    }
+
+    private static string BlendWithWhite(string hexColor, double ratio)
+    {
+        if (!TryParseHexColor(hexColor, out byte r, out byte g, out byte b))
+        {
+            return hexColor;
+        }
+
+        double clamped = Math.Clamp(ratio, 0, 1);
+        byte rr = BlendChannel(r, clamped);
+        byte gg = BlendChannel(g, clamped);
+        byte bb = BlendChannel(b, clamped);
+        return $"#{rr:X2}{gg:X2}{bb:X2}";
+    }
+
+    private static bool TryParseHexColor(string hexColor, out byte r, out byte g, out byte b)
+    {
+        r = 0;
+        g = 0;
+        b = 0;
+        if (hexColor.Length != 7 || !hexColor.StartsWith("#", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        try
+        {
+            r = Convert.ToByte(hexColor.Substring(1, 2), 16);
+            g = Convert.ToByte(hexColor.Substring(3, 2), 16);
+            b = Convert.ToByte(hexColor.Substring(5, 2), 16);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static byte BlendChannel(byte value, double ratio) =>
+        (byte)Math.Round((value * (1 - ratio)) + (255 * ratio));
 
     private static (byte R, byte G, byte B) HslToRgb(double h, double s, double l)
     {
