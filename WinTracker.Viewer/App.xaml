@@ -29,8 +29,8 @@
         <SolidColorBrush x:Key="BrushPastelRed" Color="{StaticResource ColorPastelRed}" />
         <CornerRadius x:Key="RadiusCard">18</CornerRadius>
         <CornerRadius x:Key="RadiusLarge">20</CornerRadius>
-        <CornerRadius x:Key="RadiusPill">10</CornerRadius>
-        <CornerRadius x:Key="RadiusSegment">10</CornerRadius>
+        <CornerRadius x:Key="RadiusPill">0</CornerRadius>
+        <CornerRadius x:Key="RadiusSegment">0</CornerRadius>
         <Thickness x:Key="SpaceXS">6</Thickness>
         <Thickness x:Key="SpaceSM">10</Thickness>
         <Thickness x:Key="SpaceMD">14</Thickness>
