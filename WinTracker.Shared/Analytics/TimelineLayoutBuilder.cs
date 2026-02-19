@@ -8,6 +8,7 @@ public sealed class TimelineLayoutBuilder
     public const string ActiveColorHex = "#BFA8FF";
     public const string OpenColorHex = "#B8E9C7";
     public const string MinimizedColorHex = "#F9E6A6";
+    private const double MinVisibleSeconds = 300.0;
 
     private static readonly string[] AppStates = ["Active", "Open", "Minimized"];
 
@@ -20,7 +21,9 @@ public sealed class TimelineLayoutBuilder
 
     public IReadOnlyList<string> BuildAppNames(IReadOnlyList<TimelineUsageRow> timelineRows)
     {
+        HashSet<string> visibleApps = BuildVisibleAppSet(timelineRows, MinVisibleSeconds);
         return timelineRows
+            .Where(r => visibleApps.Contains(r.ExeName))
             .GroupBy(r => r.ExeName, StringComparer.OrdinalIgnoreCase)
             .Select(g => new { ExeName = g.Key, Seconds = g.Sum(x => x.Seconds) })
             .Where(x => x.Seconds > 0)
@@ -32,7 +35,9 @@ public sealed class TimelineLayoutBuilder
 
     public IReadOnlyList<LegendItemLayout> BuildOverviewLegend(IReadOnlyList<TimelineUsageRow> timelineRows)
     {
+        HashSet<string> visibleApps = BuildVisibleAppSet(timelineRows, MinVisibleSeconds);
         var apps = timelineRows
+            .Where(x => visibleApps.Contains(x.ExeName))
             .GroupBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
             .Select(g => new { ExeName = g.Key, Seconds = g.Sum(x => x.Seconds) })
             .Where(x => x.Seconds > 0)
@@ -338,7 +343,10 @@ public sealed class TimelineLayoutBuilder
         double bucketWidth = trackWidth / bucketCount;
         DateTimeOffset fromUtc = window.FromUtc;
 
-        IReadOnlyList<string> appNames = BuildAppNames(timelineRows);
+        HashSet<string> visibleApps = BuildVisibleAppSet(timelineRows, MinVisibleSeconds);
+        IReadOnlyList<string> appNames = BuildAppNames(timelineRows)
+            .Where(x => visibleApps.Contains(x))
+            .ToList();
         var rows = new List<StateLaneLayout>(appNames.Count);
 
         foreach (string appName in appNames)
@@ -448,7 +456,9 @@ public sealed class TimelineLayoutBuilder
         int bucketCount = CalculateBucketCount(window);
         double bucketWidth = trackWidth / bucketCount;
         DateTimeOffset fromUtc = window.FromUtc;
+        HashSet<string> visibleApps = BuildVisibleAppSet(timelineRows, MinVisibleSeconds);
         var byBucket = timelineRows
+            .Where(x => visibleApps.Contains(x.ExeName))
             .Select(x => new
             {
                 BucketIndex = ToBucketIndex(x.BucketStartUtc, fromUtc, window.BucketSeconds),
@@ -512,8 +522,12 @@ public sealed class TimelineLayoutBuilder
         UsageQueryWindow window,
         double trackWidth)
     {
+        HashSet<string> visibleApps = BuildVisibleAppSet(timelineRows, MinVisibleSeconds);
+        List<TimelineUsageRow> filteredRows = timelineRows
+            .Where(x => visibleApps.Contains(x.ExeName))
+            .ToList();
         var rows = new List<TimelineRowLayout>();
-        var totalByApp = timelineRows
+        var totalByApp = filteredRows
             .GroupBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Sum(x => x.Seconds), StringComparer.OrdinalIgnoreCase);
 
@@ -534,7 +548,7 @@ public sealed class TimelineLayoutBuilder
             for (int hour = 0; hour < 24; hour++)
             {
                 DateTimeOffset hourStart = dayStart.AddHours(hour);
-                List<TimelineUsageRow> hourRows = timelineRows
+                List<TimelineUsageRow> hourRows = filteredRows
                     .Where(x => x.BucketStartUtc == hourStart)
                     .ToList();
 
@@ -621,6 +635,11 @@ public sealed class TimelineLayoutBuilder
         double trackWidth)
     {
         if (string.IsNullOrWhiteSpace(appName))
+        {
+            return [];
+        }
+        HashSet<string> visibleApps = BuildVisibleAppSet(timelineRows, MinVisibleSeconds);
+        if (!visibleApps.Contains(appName))
         {
             return [];
         }
@@ -720,6 +739,11 @@ public sealed class TimelineLayoutBuilder
         double trackWidth)
     {
         if (string.IsNullOrWhiteSpace(appName))
+        {
+            return [];
+        }
+        HashSet<string> visibleApps = BuildVisibleAppSet(timelineRows, MinVisibleSeconds);
+        if (!visibleApps.Contains(appName))
         {
             return [];
         }
@@ -826,6 +850,15 @@ public sealed class TimelineLayoutBuilder
 
         double elapsedSeconds = (bucketStartUtc - fromUtc).TotalSeconds;
         return (int)Math.Floor(elapsedSeconds / bucketSeconds);
+    }
+
+    private static HashSet<string> BuildVisibleAppSet(IReadOnlyList<TimelineUsageRow> timelineRows, double minVisibleSeconds)
+    {
+        return timelineRows
+            .GroupBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Sum(v => v.Seconds) >= minVisibleSeconds)
+            .Select(g => g.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     private static void AddNoDataSegment(ICollection<SegmentLayout> segments, double width)

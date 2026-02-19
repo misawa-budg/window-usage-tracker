@@ -71,9 +71,9 @@ public sealed class TimelineLayoutBuilderTests
 
         IReadOnlyList<TimelineUsageRow> rows =
         [
-            new(Utc(2026, 2, 19, 0, 10, 0), "devenv.exe", "Active", 60),
-            new(Utc(2026, 2, 19, 0, 10, 0), "powershell.exe", "Active", 60),
-            new(Utc(2026, 2, 19, 0, 11, 0), "devenv.exe", "Active", 60)
+            new(Utc(2026, 2, 19, 0, 10, 0), "devenv.exe", "Active", 300),
+            new(Utc(2026, 2, 19, 0, 10, 0), "powershell.exe", "Active", 300),
+            new(Utc(2026, 2, 19, 0, 11, 0), "devenv.exe", "Active", 300)
         ];
 
         IReadOnlyList<StateStackRowLayout> result = builder.BuildDailyStateStackRows(rows, window, trackWidth: 960);
@@ -95,8 +95,8 @@ public sealed class TimelineLayoutBuilderTests
 
         IReadOnlyList<TimelineUsageRow> rows =
         [
-            new(Utc(2026, 2, 19, 0, 10, 0), "devenv.exe", "Active", 30),
-            new(Utc(2026, 2, 19, 0, 10, 0), "devenv.exe", "Open", 30)
+            new(Utc(2026, 2, 19, 0, 10, 0), "devenv.exe", "Active", 150),
+            new(Utc(2026, 2, 19, 0, 10, 0), "devenv.exe", "Open", 150)
         ];
 
         IReadOnlyList<StateStackRowLayout> result = builder.BuildDailyStateStackRows(rows, window, trackWidth: 960);
@@ -214,8 +214,8 @@ public sealed class TimelineLayoutBuilderTests
 
         IReadOnlyList<TimelineUsageRow> rows =
         [
-            new(Utc(2026, 2, 19, 0, 1, 0), "devenv.exe", "Active", 60),
-            new(Utc(2026, 2, 19, 0, 59, 0), "devenv.exe", "Active", 60)
+            new(Utc(2026, 2, 19, 0, 1, 0), "devenv.exe", "Active", 300),
+            new(Utc(2026, 2, 19, 0, 59, 0), "devenv.exe", "Active", 300)
         ];
 
         IReadOnlyList<StateLaneLayout> result = builder.BuildDailyAppRows(rows, window, trackWidth: 960);
@@ -237,9 +237,9 @@ public sealed class TimelineLayoutBuilderTests
 
         IReadOnlyList<TimelineUsageRow> rows =
         [
-            new(Utc(2026, 2, 19, 0, 1, 0), "devenv.exe", "Active", 60),
-            new(Utc(2026, 2, 19, 0, 2, 0), "devenv.exe", "Active", 60),
-            new(Utc(2026, 2, 19, 0, 3, 0), "devenv.exe", "Active", 60)
+            new(Utc(2026, 2, 19, 0, 1, 0), "devenv.exe", "Active", 120),
+            new(Utc(2026, 2, 19, 0, 2, 0), "devenv.exe", "Active", 120),
+            new(Utc(2026, 2, 19, 0, 3, 0), "devenv.exe", "Active", 120)
         ];
 
         IReadOnlyList<StateLaneLayout> result = builder.BuildDailyAppRows(rows, window, trackWidth: 960);
