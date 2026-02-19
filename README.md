@@ -62,12 +62,19 @@ dotnet publish .\WinTracker.Viewer\WinTracker.Viewer.csproj -c Release -r win-x6
 - `collector/viewer` の `self-contained`（`-sc`）版
 - 各成果物の `.zip`
 
+注:
+- Collector は `dotnet publish` を使用
+- Viewer は WinUI 3 の安定性のため `dotnet build` 産物を配布フォルダへコピー
+
 ```powershell
 # 既定: Release / win-x64 / artifacts 出力（zipあり）
 powershell -ExecutionPolicy Bypass -File .\release.ps1
 
 # zip不要の場合
 powershell -ExecutionPolicy Bypass -File .\release.ps1 -NoZip
+
+# 実行中WinTrackerプロセスを停止せずに実行する場合
+powershell -ExecutionPolicy Bypass -File .\release.ps1 -StopRunningApps:$false
 ```
 
 ## 注意

@@ -4,6 +4,7 @@
 WinTracker.Collector/logs/
 WinTracker.Collector/data/
 data/
+artifacts/
 
 # Visual Studio
 .vs/
