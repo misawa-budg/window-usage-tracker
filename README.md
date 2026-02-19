@@ -102,3 +102,6 @@ powershell -ExecutionPolicy Bypass -File .\release.ps1 -StopRunningApps:$false
 ## 注意
 - Viewer は WinUI 3 実行環境（Windows App SDK）が必要です。
 - Collector は単一インスタンス起動です（多重起動すると終了します）。
+
+## License
+MIT License (`LICENSE`)
