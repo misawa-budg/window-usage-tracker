@@ -41,7 +41,7 @@ dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- repor
 ```
 
 注:
-- `seed` で投入される `source=demo-seed` データも Viewer で表示されます。
+- `seed` で投入される `source=demo-seed` データは Viewer では表示されません。
 - `--replace` は `source=demo-seed` のみ置換し、`--replace-all` は期間内の全sourceを削除してから投入します。
 
 Viewer 表示仕様（現行）:

@@ -5,6 +5,7 @@ namespace WinTracker.Viewer;
 
 internal sealed class SqliteTimelineQueryService : IDisposable
 {
+    private const string SeedSource = "demo-seed";
     private readonly SqliteConnection _connection;
 
     public SqliteTimelineQueryService(string databasePath)
@@ -38,6 +39,7 @@ internal sealed class SqliteTimelineQueryService : IDisposable
                 FROM app_events
                 WHERE state_end_utc > $from_utc
                   AND state_start_utc < $to_utc
+                  AND source <> $excluded_source
             ),
             overlaps AS (
                 SELECT
@@ -65,6 +67,7 @@ internal sealed class SqliteTimelineQueryService : IDisposable
         command.Parameters.AddWithValue("$from_utc", window.FromUtc.ToString("O"));
         command.Parameters.AddWithValue("$to_utc", window.ToUtc.ToString("O"));
         command.Parameters.AddWithValue("$bucket_seconds", window.BucketSeconds);
+        command.Parameters.AddWithValue("$excluded_source", SeedSource);
 
         var rows = new List<TimelineUsageRow>();
         using SqliteDataReader reader = command.ExecuteReader();
