@@ -56,6 +56,20 @@ dotnet publish .\WinTracker.Viewer\WinTracker.Viewer.csproj -c Release -r win-x6
 .\artifacts\viewer\WinTracker.Viewer.exe
 ```
 
+## 一括配布スクリプト
+`release.ps1` で以下を一括生成できます。
+- `collector/viewer` の `framework-dependent`（`-fd`）版
+- `collector/viewer` の `self-contained`（`-sc`）版
+- 各成果物の `.zip`
+
+```powershell
+# 既定: Release / win-x64 / artifacts 出力（zipあり）
+powershell -ExecutionPolicy Bypass -File .\release.ps1
+
+# zip不要の場合
+powershell -ExecutionPolicy Bypass -File .\release.ps1 -NoZip
+```
+
 ## 注意
 - Viewer は WinUI 3 実行環境（Windows App SDK）が必要です。
 - Collector は単一インスタンス起動です（多重起動すると終了します）。
