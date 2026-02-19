@@ -156,7 +156,7 @@ public sealed partial class MainWindow : Window
     {
         if (GetRangeLabel() == "1week")
         {
-            BuildAppTimelineRows();
+            BuildWeeklyAppRows();
         }
     }
 
@@ -195,10 +195,10 @@ public sealed partial class MainWindow : Window
             else
             {
                 SetOverviewMode(isDaily24h: false);
-                BuildOverviewRows();
+                BuildWeeklyOverviewRows();
                 SetAppMode(isDaily24h: false);
                 RebuildAppNames();
-                BuildAppTimelineRows();
+                BuildWeeklyAppRows();
             }
 
             RebuildOverviewLegend();
@@ -222,35 +222,25 @@ public sealed partial class MainWindow : Window
 
     private void SetOverviewMode(bool isDaily24h)
     {
-        OverviewDailyPanel.Visibility = isDaily24h ? Visibility.Visible : Visibility.Collapsed;
-        OverviewWeekHeader.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
-        OverviewListView.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
+        OverviewDailyPanel.Visibility = Visibility.Visible;
+        OverviewWeekHeader.Visibility = Visibility.Collapsed;
+        OverviewListView.Visibility = Visibility.Collapsed;
+        OverviewHeaderLabelTextBlock.Text = isDaily24h ? "State" : "Date";
 
-        if (isDaily24h)
-        {
-            _overviewRows.Clear();
-        }
-        else
-        {
-            _overviewDailyRows.Clear();
-        }
+        _overviewRows.Clear();
+        _overviewDailyRows.Clear();
     }
 
     private void SetAppMode(bool isDaily24h)
     {
         AppSelectorCard.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
-        AppDailyPanel.Visibility = isDaily24h ? Visibility.Visible : Visibility.Collapsed;
-        AppWeekHeader.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
-        AppTimelineListView.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
+        AppDailyPanel.Visibility = Visibility.Visible;
+        AppWeekHeader.Visibility = Visibility.Collapsed;
+        AppTimelineListView.Visibility = Visibility.Collapsed;
+        AppHeaderLabelTextBlock.Text = isDaily24h ? "App" : "Date";
 
-        if (isDaily24h)
-        {
-            _appRows.Clear();
-        }
-        else
-        {
-            _appDailyLanes.Clear();
-        }
+        _appRows.Clear();
+        _appDailyLanes.Clear();
     }
 
     private UsageQueryWindow GetWindowFromSelection() =>
@@ -294,12 +284,27 @@ public sealed partial class MainWindow : Window
 
     private void BuildDailyOverviewRows()
     {
-        _overviewDailyRows.Clear();
         IReadOnlyList<StateStackRowLayout> rows = _layoutBuilder.BuildDailyStateStackRows(
             _timelineRows,
             _currentWindow,
             DailyTrackWidth);
 
+        RebuildOverviewStackRows(rows);
+    }
+
+    private void BuildWeeklyOverviewRows()
+    {
+        IReadOnlyList<StateStackRowLayout> rows = _layoutBuilder.BuildWeeklyStateStackRows(
+            _timelineRows,
+            _currentWindow,
+            DailyTrackWidth);
+
+        RebuildOverviewStackRows(rows);
+    }
+
+    private void RebuildOverviewStackRows(IReadOnlyList<StateStackRowLayout> rows)
+    {
+        _overviewDailyRows.Clear();
         foreach (StateStackRowLayout row in rows)
         {
             _overviewDailyRows.Add(new StateStackRowViewModel(
@@ -397,30 +402,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void BuildAppTimelineRows()
-    {
-        _appRows.Clear();
-        string? app = AppComboBox.SelectedItem as string;
-
-        if (string.IsNullOrWhiteSpace(app))
-        {
-            return;
-        }
-        IReadOnlyList<TimelineRowLayout> rows = _layoutBuilder.BuildAppTimelineRows(
-            _timelineRows,
-            _currentWindow,
-            app,
-            BucketTrackWidth);
-
-        foreach (TimelineRowLayout row in rows)
-        {
-            _appRows.Add(new TimelineRowViewModel(
-                row.BucketLabel,
-                row.TotalLabel,
-                row.Segments.Select(ToTimelineSegmentViewModel).ToList()));
-        }
-    }
-
     private void BuildAppDailyRows()
     {
         _appDailyLanes.Clear();
@@ -435,6 +416,31 @@ public sealed partial class MainWindow : Window
                 lane.Label,
                 lane.TotalLabel,
                 lane.Segments.Select(ToAbsoluteSegmentViewModel).ToList()));
+        }
+    }
+
+    private void BuildWeeklyAppRows()
+    {
+        _appDailyLanes.Clear();
+        string? app = AppComboBox.SelectedItem as string;
+
+        if (string.IsNullOrWhiteSpace(app))
+        {
+            return;
+        }
+
+        IReadOnlyList<TimelineRowLayout> rows = _layoutBuilder.BuildAppTimelineRows(
+            _timelineRows,
+            _currentWindow,
+            app,
+            DailyTrackWidth);
+
+        foreach (TimelineRowLayout row in rows)
+        {
+            _appDailyLanes.Add(new StateLaneViewModel(
+                row.BucketLabel,
+                row.TotalLabel,
+                row.Segments.Select(ToAbsoluteSegmentViewModel).ToList()));
         }
     }
 

@@ -515,6 +515,40 @@ public sealed class TimelineLayoutBuilder
         ];
     }
 
+    public IReadOnlyList<StateStackRowLayout> BuildWeeklyStateStackRows(
+        IReadOnlyList<TimelineUsageRow> timelineRows,
+        UsageQueryWindow window,
+        double trackWidth)
+    {
+        var rows = new List<StateStackRowLayout>();
+
+        foreach (DateTimeOffset dayStart in EnumerateDayBuckets(window))
+        {
+            DateTimeOffset dayEnd = dayStart.AddDays(1);
+            if (dayEnd > window.ToUtc)
+            {
+                dayEnd = window.ToUtc;
+            }
+
+            UsageQueryWindow dayWindow = new(
+                dayStart,
+                dayEnd,
+                window.BucketSize);
+
+            List<TimelineUsageRow> dayRows = timelineRows
+                .Where(x => x.BucketStartUtc >= dayStart && x.BucketStartUtc < dayEnd)
+                .ToList();
+
+            StateStackRowLayout running = BuildDailyStateStackRows(dayRows, dayWindow, trackWidth)[0];
+            rows.Add(new StateStackRowLayout(
+                $"{dayStart.ToLocalTime():MM/dd (ddd)}",
+                running.TotalLabel,
+                running.Columns));
+        }
+
+        return rows;
+    }
+
     public IReadOnlyList<TimelineRowLayout> BuildOverviewRows(
         IReadOnlyList<TimelineUsageRow> timelineRows,
         UsageQueryWindow window,
@@ -689,33 +723,29 @@ public sealed class TimelineLayoutBuilder
                     continue;
                 }
 
-                double scale = rawHourSeconds > 0 ? occupiedSeconds / rawHourSeconds : 0;
                 double occupiedWidth = 0;
 
                 occupiedWidth += AddStateSegment(
                     segments,
                     "Active",
                     activeSeconds,
-                    window.BucketSeconds,
+                    rawHourSeconds,
                     appActiveColor,
-                    hourWidth,
-                    scale);
+                    hourWidth);
                 occupiedWidth += AddStateSegment(
                     segments,
                     "Open",
                     openSeconds,
-                    window.BucketSeconds,
+                    rawHourSeconds,
                     appOpenColor,
-                    hourWidth,
-                    scale);
+                    hourWidth);
                 occupiedWidth += AddStateSegment(
                     segments,
                     "Minimized",
                     minimizedSeconds,
-                    window.BucketSeconds,
+                    rawHourSeconds,
                     appMinimizedColor,
-                    hourWidth,
-                    scale);
+                    hourWidth);
 
                 double gapWidth = Math.Max(0, hourWidth - occupiedWidth);
                 if (gapWidth > 0)
@@ -881,17 +911,17 @@ public sealed class TimelineLayoutBuilder
         ICollection<SegmentLayout> segments,
         string state,
         double seconds,
-        int bucketSeconds,
+        double stateTotalSeconds,
         string colorHex,
-        double hourWidth,
-        double scale)
+        double hourWidth)
     {
-        if (seconds <= 0 || bucketSeconds <= 0 || hourWidth <= 0 || scale <= 0)
+        if (seconds <= 0 || stateTotalSeconds <= 0 || hourWidth <= 0)
         {
             return 0;
         }
 
-        double width = hourWidth * (seconds / bucketSeconds) * scale;
+        double width = hourWidth * (seconds / stateTotalSeconds);
+        width = Math.Min(hourWidth, width);
         if (width <= 0)
         {
             return 0;

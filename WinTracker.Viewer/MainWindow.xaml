@@ -189,6 +189,7 @@
                                                     <ColumnDefinition Width="90" />
                                                 </Grid.ColumnDefinitions>
                                             <TextBlock
+                                                x:Name="OverviewHeaderLabelTextBlock"
                                                 VerticalAlignment="Center"
                                                 FontSize="12"
                                                 Foreground="{StaticResource BrushTextSecondary}"
@@ -591,6 +592,7 @@
                                                     <ColumnDefinition Width="90" />
                                                 </Grid.ColumnDefinitions>
                                                 <TextBlock
+                                                    x:Name="AppHeaderLabelTextBlock"
                                                     VerticalAlignment="Center"
                                                     FontSize="12"
                                                     Foreground="{StaticResource BrushTextSecondary}"

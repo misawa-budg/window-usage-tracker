@@ -157,6 +157,29 @@ public sealed class TimelineLayoutBuilderTests
     }
 
     [Fact]
+    public void BuildWeeklyStateStackRows_ReturnsSevenDateRows_WithFullTrackWidth()
+    {
+        var builder = new TimelineLayoutBuilder();
+        UsageQueryWindow window = CreateWeekWindow(Utc(2026, 2, 13, 0, 0, 0));
+        IReadOnlyList<TimelineUsageRow> rows =
+        [
+            Row(2026, 2, 13, 8, "devenv.exe", "Active", 3600),
+            Row(2026, 2, 13, 8, "powershell.exe", "Open", 1800),
+            Row(2026, 2, 14, 10, "msedge.exe", "Open", 3600)
+        ];
+
+        IReadOnlyList<StateStackRowLayout> result = builder.BuildWeeklyStateStackRows(rows, window, trackWidth: 960);
+
+        Assert.Equal(7, result.Count);
+        foreach (StateStackRowLayout row in result)
+        {
+            Assert.Matches(@"\d{2}/\d{2} \(.+\)", row.Label);
+            AssertApproximately(row.Columns.Sum(x => x.Width), 960);
+            Assert.True(ParseDuration(row.TotalLabel) <= TimeSpan.FromHours(24));
+        }
+    }
+
+    [Fact]
     public void BuildAppTimelineRows_UsesAppToneColors_AndKeepsTrackWidth()
     {
         var builder = new TimelineLayoutBuilder();
@@ -191,6 +214,25 @@ public sealed class TimelineLayoutBuilderTests
                 Assert.Contains(segment.ColorHex, expectedColors);
             }
         }
+    }
+
+    [Fact]
+    public void BuildAppTimelineRows_FillsHourBucketWhenAppHasData()
+    {
+        var builder = new TimelineLayoutBuilder();
+        UsageQueryWindow window = CreateWeekWindow(Utc(2026, 2, 13, 0, 0, 0));
+        IReadOnlyList<TimelineUsageRow> rows =
+        [
+            Row(2026, 2, 13, 8, "devenv.exe", "Active", 600),
+            Row(2026, 2, 13, 8, "devenv.exe", "Open", 300)
+        ];
+
+        IReadOnlyList<TimelineRowLayout> result = builder.BuildAppTimelineRows(rows, window, "devenv.exe", trackWidth: 960);
+        TimelineRowLayout day = result[0];
+        double hourWidth = 960.0 / 24.0;
+        double coloredWidth = day.Segments.Where(x => !x.IsNoData).Sum(x => x.Width);
+
+        AssertApproximately(coloredWidth, hourWidth);
     }
 
     [Fact]
