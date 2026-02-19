@@ -372,6 +372,8 @@
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="12" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="12" />
                                         <RowDefinition Height="*" />
                                     </Grid.RowDefinitions>
                                     <Border
@@ -401,9 +403,168 @@
                                         </Grid>
                                     </Border>
 
+                                    <Grid
+                                        x:Name="AppDailyPanel"
+                                        Grid.Row="2"
+                                        Margin="0,0,0,10"
+                                        Visibility="Collapsed">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="10" />
+                                            <RowDefinition Height="*" />
+                                        </Grid.RowDefinitions>
+
+                                        <Border
+                                            Margin="0,0,0,12"
+                                            Padding="14"
+                                            Background="{StaticResource BrushCardBackgroundSoft}"
+                                            BorderBrush="{StaticResource BrushBorderSoft}"
+                                            BorderThickness="1"
+                                            CornerRadius="14">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="140" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="90" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock
+                                                    VerticalAlignment="Center"
+                                                    FontSize="12"
+                                                    Foreground="{StaticResource BrushTextSecondary}"
+                                                    Text="State" />
+                                                <Grid Grid.Column="1">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock
+                                                        x:Name="AppTick00TextBlock"
+                                                        Grid.Column="0"
+                                                        HorizontalAlignment="Left"
+                                                        FontSize="12"
+                                                        Foreground="{StaticResource BrushTextSecondary}"
+                                                        Text="00:00" />
+                                                    <TextBlock
+                                                        x:Name="AppTick06TextBlock"
+                                                        Grid.Column="1"
+                                                        HorizontalAlignment="Center"
+                                                        FontSize="12"
+                                                        Foreground="{StaticResource BrushTextSecondary}"
+                                                        Text="06:00" />
+                                                    <TextBlock
+                                                        x:Name="AppTick12TextBlock"
+                                                        Grid.Column="2"
+                                                        HorizontalAlignment="Center"
+                                                        FontSize="12"
+                                                        Foreground="{StaticResource BrushTextSecondary}"
+                                                        Text="12:00" />
+                                                    <TextBlock
+                                                        x:Name="AppTick18TextBlock"
+                                                        Grid.Column="3"
+                                                        HorizontalAlignment="Center"
+                                                        FontSize="12"
+                                                        Foreground="{StaticResource BrushTextSecondary}"
+                                                        Text="18:00" />
+                                                    <TextBlock
+                                                        x:Name="AppTick24TextBlock"
+                                                        Grid.Column="4"
+                                                        HorizontalAlignment="Right"
+                                                        FontSize="12"
+                                                        Foreground="{StaticResource BrushTextSecondary}"
+                                                        Text="24:00" />
+                                                </Grid>
+                                                <TextBlock
+                                                    Grid.Column="2"
+                                                    HorizontalAlignment="Right"
+                                                    FontSize="12"
+                                                    Foreground="{StaticResource BrushTextSecondary}"
+                                                    Text="Total" />
+                                            </Grid>
+                                        </Border>
+
+                                        <ListView
+                                            x:Name="AppDailyListView"
+                                            Grid.Row="2"
+                                            HorizontalContentAlignment="Stretch"
+                                            IsTabStop="False"
+                                            SelectionMode="None">
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate x:DataType="local:StateLaneViewModel">
+                                                    <Border
+                                                        Margin="0,0,0,12"
+                                                        Padding="14"
+                                                        Background="{StaticResource BrushCardBackgroundSoft}"
+                                                        BorderBrush="{StaticResource BrushBorderSoft}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="14"
+                                                        PointerEntered="OnCardPointerEntered"
+                                                        PointerExited="OnCardPointerExited"
+                                                        PointerPressed="OnCardPointerPressed"
+                                                        PointerReleased="OnCardPointerReleased">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="140" />
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="90" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock
+                                                                VerticalAlignment="Center"
+                                                                FontSize="14"
+                                                                Foreground="{StaticResource BrushTextPrimary}"
+                                                                Text="{x:Bind Label}" />
+
+                                                            <Border
+                                                                Grid.Column="1"
+                                                                Height="50"
+                                                                Background="{StaticResource BrushRail}"
+                                                                CornerRadius="{StaticResource RadiusPill}">
+                                                                <Viewbox Stretch="Fill" StretchDirection="Both">
+                                                                    <Grid Width="960" Height="50">
+                                                                        <ItemsControl ItemsSource="{x:Bind Segments}">
+                                                                            <ItemsControl.ItemsPanel>
+                                                                                <ItemsPanelTemplate>
+                                                                                    <Canvas />
+                                                                                </ItemsPanelTemplate>
+                                                                            </ItemsControl.ItemsPanel>
+                                                                            <ItemsControl.ItemTemplate>
+                                                                                <DataTemplate x:DataType="local:AbsoluteSegmentViewModel">
+                                                                                    <Border
+                                                                                        Width="{x:Bind Width}"
+                                                                                        Height="46"
+                                                                                        Canvas.Left="{x:Bind Left}"
+                                                                                        Background="{x:Bind Fill}"
+                                                                                        CornerRadius="{StaticResource RadiusSegment}">
+                                                                                        <ToolTipService.ToolTip>
+                                                                                            <TextBlock Text="{x:Bind Tooltip}" />
+                                                                                        </ToolTipService.ToolTip>
+                                                                                    </Border>
+                                                                                </DataTemplate>
+                                                                            </ItemsControl.ItemTemplate>
+                                                                        </ItemsControl>
+                                                                    </Grid>
+                                                                </Viewbox>
+                                                            </Border>
+
+                                                            <TextBlock
+                                                                Grid.Column="2"
+                                                                VerticalAlignment="Center"
+                                                                HorizontalAlignment="Right"
+                                                                FontSize="14"
+                                                                Foreground="{StaticResource BrushTextPrimary}"
+                                                                Text="{x:Bind TotalLabel}" />
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
+                                    </Grid>
+
                                     <ListView
                                         x:Name="AppTimelineListView"
-                                        Grid.Row="2"
+                                        Grid.Row="4"
                                         HorizontalContentAlignment="Stretch"
                                         IsTabStop="False"
                                         SelectionMode="None">

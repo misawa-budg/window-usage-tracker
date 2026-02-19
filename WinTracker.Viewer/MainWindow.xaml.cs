@@ -29,6 +29,7 @@ public sealed partial class MainWindow : Window
 
     private readonly ObservableCollection<TimelineRowViewModel> _overviewRows = [];
     private readonly ObservableCollection<StateLaneViewModel> _overviewDailyLanes = [];
+    private readonly ObservableCollection<StateLaneViewModel> _appDailyLanes = [];
     private readonly ObservableCollection<TimelineRowViewModel> _appRows = [];
     private readonly ObservableCollection<string> _appNames = [];
 
@@ -46,6 +47,7 @@ public sealed partial class MainWindow : Window
 
         OverviewListView.ItemsSource = _overviewRows;
         OverviewDailyListView.ItemsSource = _overviewDailyLanes;
+        AppDailyListView.ItemsSource = _appDailyLanes;
         AppTimelineListView.ItemsSource = _appRows;
         AppComboBox.ItemsSource = _appNames;
 
@@ -93,6 +95,13 @@ public sealed partial class MainWindow : Window
         Tick12TextBlock.Text = compact ? "12" : "12:00";
         Tick18TextBlock.Text = compact ? "18" : "18:00";
         Tick24TextBlock.Text = compact ? "24" : "24:00";
+
+        AppTick00TextBlock.Text = compact ? "0" : "00:00";
+        AppTick06TextBlock.Text = compact ? "6" : "06:00";
+        AppTick12TextBlock.Text = compact ? "12" : "12:00";
+        AppTick18TextBlock.Text = compact ? "18" : "18:00";
+        AppTick24TextBlock.Text = compact ? "24" : "24:00";
+
         UpdateTickOffsets();
     }
 
@@ -102,6 +111,8 @@ public sealed partial class MainWindow : Window
         double offset = Math.Min(TickOffsetMax, TickOffsetBase + (extra / 120.0));
         Tick06TextBlock.Margin = new Thickness(-offset, 0, 0, 0);
         Tick18TextBlock.Margin = new Thickness(offset, 0, 0, 0);
+        AppTick06TextBlock.Margin = new Thickness(-offset, 0, 0, 0);
+        AppTick18TextBlock.Margin = new Thickness(offset, 0, 0, 0);
     }
 
     private async void OnRefreshClicked(object sender, RoutedEventArgs e)
@@ -121,7 +132,14 @@ public sealed partial class MainWindow : Window
 
     private void OnAppSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        BuildAppTimelineRows();
+        if (GetRangeLabel() == "24h")
+        {
+            BuildAppDailyLanes();
+        }
+        else
+        {
+            BuildAppTimelineRows();
+        }
     }
 
     private async Task ReloadAsync()
@@ -153,15 +171,24 @@ public sealed partial class MainWindow : Window
             {
                 SetOverviewMode(isDaily24h: true);
                 BuildDailyOverviewLanes();
+                SetAppMode(isDaily24h: true);
             }
             else
             {
                 SetOverviewMode(isDaily24h: false);
                 BuildOverviewRows();
+                SetAppMode(isDaily24h: false);
             }
 
             RebuildAppNames();
-            BuildAppTimelineRows();
+            if (GetRangeLabel() == "24h")
+            {
+                BuildAppDailyLanes();
+            }
+            else
+            {
+                BuildAppTimelineRows();
+            }
 
             StatusTextBlock.Text = $"Loaded: {GetRangeLabel()} / events={_timelineRows.Count}";
         }
@@ -191,6 +218,21 @@ public sealed partial class MainWindow : Window
         else
         {
             _overviewDailyLanes.Clear();
+        }
+    }
+
+    private void SetAppMode(bool isDaily24h)
+    {
+        AppDailyPanel.Visibility = isDaily24h ? Visibility.Visible : Visibility.Collapsed;
+        AppTimelineListView.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
+
+        if (isDaily24h)
+        {
+            _appRows.Clear();
+        }
+        else
+        {
+            _appDailyLanes.Clear();
         }
     }
 
@@ -438,6 +480,61 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void BuildAppDailyLanes()
+    {
+        _appDailyLanes.Clear();
+        string? app = AppComboBox.SelectedItem as string;
+        if (string.IsNullOrWhiteSpace(app))
+        {
+            return;
+        }
+
+        string[] states = ["Active", "Open", "Minimized"];
+        double hourWidth = DailyTrackWidth / 24.0;
+
+        foreach (string state in states)
+        {
+            var segments = new List<AbsoluteSegmentViewModel>();
+            double laneTotalSeconds = 0;
+
+            for (int hour = 0; hour < 24; hour++)
+            {
+                DateTimeOffset bucketStart = _currentWindow.FromUtc.AddHours(hour);
+                DateTimeOffset bucketEnd = bucketStart.AddHours(1);
+
+                double seconds = _timelineRows
+                    .Where(x =>
+                        string.Equals(x.ExeName, app, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(x.State, state, StringComparison.OrdinalIgnoreCase) &&
+                        x.BucketStartUtc == bucketStart)
+                    .Sum(x => x.Seconds);
+
+                laneTotalSeconds += seconds;
+                if (seconds <= 0)
+                {
+                    continue;
+                }
+
+                double width = hourWidth * (seconds / _currentWindow.BucketSeconds);
+                width = Math.Min(hourWidth, Math.Max(1, width));
+                double left = hour * hourWidth;
+
+                DateTimeOffset localStart = bucketStart.ToLocalTime();
+                DateTimeOffset localEnd = bucketEnd.ToLocalTime();
+                segments.Add(new AbsoluteSegmentViewModel(
+                    left,
+                    width,
+                    CreateBrush(ColorForAppState(app, state)),
+                    $"{state} | {app} | {localStart:HH\\:mm}-{localEnd:HH\\:mm} | {ToDuration(seconds)}"));
+            }
+
+            _appDailyLanes.Add(new StateLaneViewModel(
+                state,
+                ToDuration(laneTotalSeconds),
+                segments));
+        }
+    }
+
     private static void AddStateSegment(
         ICollection<TimelineSegmentViewModel> segments,
         string state,
@@ -609,6 +706,7 @@ public sealed partial class MainWindow : Window
     {
         _overviewRows.Clear();
         _overviewDailyLanes.Clear();
+        _appDailyLanes.Clear();
         _appRows.Clear();
         _appNames.Clear();
         AppComboBox.SelectedItem = null;
