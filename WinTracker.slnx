@@ -2,5 +2,6 @@
   <Project Path="WinTracker.Collector/WinTracker.Collector.csproj" />
   <Project Path="WinTracker.Collector.Tests/WinTracker.Collector.Tests.csproj" />
   <Project Path="WinTracker.Shared/WinTracker.Shared.csproj" />
+  <Project Path="WinTracker.Viewer.Tests/WinTracker.Viewer.Tests.csproj" />
   <Project Path="WinTracker.Viewer/WinTracker.Viewer.csproj" />
 </Solution>
