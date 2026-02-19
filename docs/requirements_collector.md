@@ -14,6 +14,7 @@ iPhoneのスクリーンタイムのように、使ったアプリをタイム�
 - 対象粒度: アプリ単位（exe名）
 - 対象状態: `Active / Open / Minimized`
 - 対象外（初期版）: URL取得、サービス化、自動起動設定
+- 実行形態: 単一インスタンス常駐（Mutex）
 
 ## 状態定義（排他的）
 アプリ状態は、任意時点で以下のいずれか1つのみ。
@@ -43,7 +44,9 @@ iPhoneのスクリーンタイムのように、使ったアプリをタイム�
 - `hwnd`（TEXT）: 16進文字列（例 `0x001A08F2`）
 - `title`（TEXT）: ウィンドウタイトル
 - `state`（TEXT）: `Active | Open | Minimized`
-- `source`（TEXT）: `win_event | rescan | shutdown`
+- `source`（TEXT）
+  - 通常運用: `win_event | rescan | shutdown`
+  - 開発用シード: `demo-seed`
 
 ### インデックス
 - `idx_app_events_time` on (`event_at_utc`)
@@ -60,7 +63,7 @@ iPhoneのスクリーンタイムのように、使ったアプリをタイム�
 - `EVENT_SYSTEM_MINIMIZEEND`（最小化終了）
 
 ### 補完再スキャン
-- 5分ごとに全体整合性チェックを実行
+- `collector.settings.json` の `rescanIntervalSeconds` に従って全体整合性チェックを実行（既定300秒）
 - `EnumWindows` でトップレベルウィンドウを列挙し、`Open/Minimized` を再評価
 - 再スキャン由来のレコードは `source=rescan` として保存
 
@@ -69,12 +72,22 @@ iPhoneのスクリーンタイムのように、使ったアプリをタイム�
 - SQLite書き込みは50件単位でバッチ化する
 - 終了シグナル受信時は未書き込みバッチをflushし、稼働中の区間を `source=shutdown` で確定保存して終了する
 
+### 収集フィルタ
+- 設定ファイルの `excludedExeNames` に含まれるプロセスは除外する
+- 代表ウィンドウ選定では以下を除外する
+  - owner付きウィンドウ
+  - タイトル空（最小化以外）
+  - cloakedウィンドウ（最小化以外）
+  - 極小ウィンドウ（最小化以外、最小50x50）
+
 ## 機能要件
 - Collectorは `Active` 状態を検知できること
 - Collectorは `Minimized` 状態を検知できること
 - Collectorは `Open` 状態を検知できること
 - Collectorは `app_events` の必須項目をSQLiteへ保存できること
 - CollectorはUTCで時刻を保存できること
+- CollectorはCtrl+C時に安全に停止し、バッファをflushできること
+- Collectorは同時起動を防止できること
 
 ## 非機能要件
 ### パフォーマンス（初期目標値）
