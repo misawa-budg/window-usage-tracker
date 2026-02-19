@@ -67,7 +67,7 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="12" />
                                 <ColumnDefinition Width="160" />
-                                <ColumnDefinition Width="16" />
+                                <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBlock
@@ -87,13 +87,17 @@
                             <Button
                                 x:Name="RefreshButton"
                                 Grid.Column="4"
+                                Margin="0,0,8,0"
+                                HorizontalAlignment="Right"
                                 MinHeight="40"
                                 Padding="16,10"
-                                Background="{StaticResource BrushStateActive}"
+                                Background="{StaticResource BrushCardBackground}"
+                                BorderBrush="{ThemeResource ComboBoxBorderBrush}"
+                                BorderThickness="2"
                                 Foreground="{StaticResource BrushTextPrimary}"
                                 FontSize="14"
-                                FontWeight="SemiBold"
-                                CornerRadius="12"
+                                FontWeight="Normal"
+                                CornerRadius="4"
                                 Click="OnRefreshClicked"
                                 PointerEntered="OnRefreshButtonPointerEntered"
                                 PointerExited="OnRefreshButtonPointerExited"

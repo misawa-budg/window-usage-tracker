@@ -24,9 +24,9 @@ public sealed partial class MainWindow : Window
     private const int CompactTickSwitchWidth = 1360;
     private const double TickOffsetBase = 100.0;
     private const double TickOffsetMax = 100.0;
-    private static readonly SolidColorBrush RefreshButtonNormalBrush = CreateBrush("#BFA8FF");
-    private static readonly SolidColorBrush RefreshButtonHoverBrush = CreateBrush("#A892F2");
-    private static readonly SolidColorBrush RefreshButtonPressedBrush = CreateBrush("#967EE8");
+    private static readonly SolidColorBrush RefreshButtonNormalBrush = CreateBrush("#FFFFFF");
+    private static readonly SolidColorBrush RefreshButtonHoverBrush = CreateBrush("#EFEFEF");
+    private static readonly SolidColorBrush RefreshButtonPressedBrush = CreateBrush("#E0E0E0");
     private static readonly SolidColorBrush TransparentBrush =
         new(Windows.UI.Color.FromArgb(0, 0, 0, 0));
 
