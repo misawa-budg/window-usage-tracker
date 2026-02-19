@@ -852,12 +852,23 @@ public sealed partial class MainWindow : Window
 
     private static string ColorForKey(string key)
     {
+        uint hash = ComputeStableHash(key);
         int hue = HashToHue(key);
-        (byte r, byte g, byte b) = HslToRgb(hue / 360.0, 0.62, 0.55);
+        // Spread colors across hue/saturation/lightness to reduce collisions between app colors.
+        double saturation = 0.46 + (((hash >> 8) % 15) / 100.0); // 0.46 - 0.60
+        double lightness = 0.56 + (((hash >> 16) % 11) / 100.0); // 0.56 - 0.66
+        (byte r, byte g, byte b) = HslToRgb(hue / 360.0, saturation, lightness);
         return $"#{r:X2}{g:X2}{b:X2}";
     }
 
     private static int HashToHue(string key)
+    {
+        uint hash = ComputeStableHash(key);
+        // Full 360-degree hue distribution instead of 4-color palette.
+        return (int)(hash % 360);
+    }
+
+    private static uint ComputeStableHash(string key)
     {
         uint hash = 2166136261;
         foreach (char c in key.ToLowerInvariant())
@@ -866,8 +877,7 @@ public sealed partial class MainWindow : Window
             hash *= 16777619;
         }
 
-        int[] palette = [268, 145, 8, 48];
-        return palette[(int)(hash % (uint)palette.Length)];
+        return hash;
     }
 
     private static (byte R, byte G, byte B) HslToRgb(double h, double s, double l)
