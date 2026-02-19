@@ -15,4 +15,8 @@
     <ProjectReference Include="..\WinTracker.Shared\WinTracker.Shared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="WinTracker.Collector.Tests" />
+  </ItemGroup>
+
 </Project>

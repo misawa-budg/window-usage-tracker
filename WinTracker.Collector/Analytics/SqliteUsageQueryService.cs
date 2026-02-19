@@ -107,21 +107,21 @@ internal sealed class SqliteUsageQueryService : IDisposable
             """
             WITH RECURSIVE buckets AS (
                 SELECT
-                    julianday($from_utc) AS bucket_start,
-                    julianday($from_utc) + ($bucket_seconds / 86400.0) AS bucket_end
+                    unixepoch($from_utc) AS bucket_start,
+                    unixepoch($from_utc) + $bucket_seconds AS bucket_end
                 UNION ALL
                 SELECT
                     bucket_end,
-                    bucket_end + ($bucket_seconds / 86400.0)
+                    bucket_end + $bucket_seconds
                 FROM buckets
-                WHERE bucket_end < julianday($to_utc)
+                WHERE bucket_end < unixepoch($to_utc)
             ),
             events AS (
                 SELECT
                     exe_name,
                     state,
-                    julianday(state_start_utc) AS event_start,
-                    julianday(state_end_utc) AS event_end
+                    unixepoch(state_start_utc) AS event_start,
+                    unixepoch(state_end_utc) AS event_end
                 FROM app_events
                 WHERE state_end_utc > $from_utc
                   AND state_start_utc < $to_utc
@@ -139,10 +139,10 @@ internal sealed class SqliteUsageQueryService : IDisposable
                    AND e.event_start < b.bucket_end
             )
             SELECT
-                CAST(((bucket_start - 2440587.5) * 86400.0) AS INTEGER) AS bucket_start_unix,
+                bucket_start AS bucket_start_unix,
                 exe_name,
                 state,
-                SUM((overlap_end - overlap_start) * 86400.0) AS seconds
+                SUM(overlap_end - overlap_start) AS seconds
             FROM overlaps
             WHERE overlap_end > overlap_start
             GROUP BY bucket_start, exe_name, state
