@@ -22,7 +22,13 @@
 - `WinTracker.Viewer`
   - 役割: SQLiteログを読み取り可視化するGUI
   - UI方針: WinUI 3（Windows App SDK）
-  - 画面構成: `一覧タイムライン` / `アプリ別タイムライン` の2タブ
+  - 画面構成:
+    - 上段 `一覧タイムライン`（Running）
+    - 下段 `アプリ別タイムライン`
+    - 期間切替は `24h / 1week`（タブではなく同一画面を再構築）
+  - 色ルール:
+    - 一覧: アプリごとに固有色
+    - アプリ別: 同一アプリ色相で `Active/Open/Minimized` を濃淡表示
 
 ## 依存関係
 - `WinTracker.Collector -> WinTracker.Shared`

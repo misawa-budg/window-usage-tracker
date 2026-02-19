@@ -41,8 +41,17 @@ dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- repor
 ```
 
 注:
-- `seed` で投入される `source=demo-seed` データは、Viewer表示では除外されます。
+- `seed` で投入される `source=demo-seed` データも Viewer で表示されます。
 - `--replace` は `source=demo-seed` のみ置換し、`--replace-all` は期間内の全sourceを削除してから投入します。
+
+Viewer 表示仕様（現行）:
+- `24h`
+  - 一覧: `Running` 1行（同時アプリは縦分割）
+  - アプリ別: アプリごとに1行
+- `1week`
+  - 一覧: 日付ごとの `Running` 行（7行）
+  - アプリ別: 選択アプリの日付行（7行）
+- アプリ別の色は「アプリ固有色 + 状態トーン（Active/Open/Minimized）」です。
 
 ## テスト
 ```powershell
