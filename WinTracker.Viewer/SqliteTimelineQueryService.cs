@@ -63,8 +63,7 @@ internal sealed class SqliteTimelineQueryService : IDisposable
             ORDER BY bucket_start ASC, exe_name ASC, state ASC;
             """;
 
-        command.Parameters.AddWithValue("$from_utc", window.FromUtc.ToString("O"));
-        command.Parameters.AddWithValue("$to_utc", window.ToUtc.ToString("O"));
+        BindWindow(command, window);
         command.Parameters.AddWithValue("$bucket_seconds", window.BucketSeconds);
         command.Parameters.AddWithValue("$excluded_source", SeedSource);
 
@@ -99,8 +98,7 @@ internal sealed class SqliteTimelineQueryService : IDisposable
             ORDER BY state_start_utc ASC;
             """;
 
-        command.Parameters.AddWithValue("$from_utc", window.FromUtc.ToString("O"));
-        command.Parameters.AddWithValue("$to_utc", window.ToUtc.ToString("O"));
+        BindWindow(command, window);
 
         var rows = new List<ActiveIntervalRow>();
         using SqliteDataReader reader = command.ExecuteReader();
@@ -108,9 +106,7 @@ internal sealed class SqliteTimelineQueryService : IDisposable
         {
             DateTimeOffset startUtc = DateTimeOffset.Parse(reader.GetString(1));
             DateTimeOffset endUtc = DateTimeOffset.Parse(reader.GetString(2));
-            DateTimeOffset clippedStart = startUtc < window.FromUtc ? window.FromUtc : startUtc;
-            DateTimeOffset clippedEnd = endUtc > window.ToUtc ? window.ToUtc : endUtc;
-            if (clippedEnd <= clippedStart)
+            if (!TryClipToWindow(startUtc, endUtc, window, out DateTimeOffset clippedStart, out DateTimeOffset clippedEnd))
             {
                 continue;
             }
@@ -140,8 +136,7 @@ internal sealed class SqliteTimelineQueryService : IDisposable
             ORDER BY state_start_utc ASC;
             """;
 
-        command.Parameters.AddWithValue("$from_utc", window.FromUtc.ToString("O"));
-        command.Parameters.AddWithValue("$to_utc", window.ToUtc.ToString("O"));
+        BindWindow(command, window);
 
         var rows = new List<AppStateIntervalRow>();
         using SqliteDataReader reader = command.ExecuteReader();
@@ -149,9 +144,7 @@ internal sealed class SqliteTimelineQueryService : IDisposable
         {
             DateTimeOffset startUtc = DateTimeOffset.Parse(reader.GetString(2));
             DateTimeOffset endUtc = DateTimeOffset.Parse(reader.GetString(3));
-            DateTimeOffset clippedStart = startUtc < window.FromUtc ? window.FromUtc : startUtc;
-            DateTimeOffset clippedEnd = endUtc > window.ToUtc ? window.ToUtc : endUtc;
-            if (clippedEnd <= clippedStart)
+            if (!TryClipToWindow(startUtc, endUtc, window, out DateTimeOffset clippedStart, out DateTimeOffset clippedEnd))
             {
                 continue;
             }
@@ -164,6 +157,24 @@ internal sealed class SqliteTimelineQueryService : IDisposable
         }
 
         return rows;
+    }
+
+    private static void BindWindow(SqliteCommand command, UsageQueryWindow window)
+    {
+        command.Parameters.AddWithValue("$from_utc", window.FromUtc.ToString("O"));
+        command.Parameters.AddWithValue("$to_utc", window.ToUtc.ToString("O"));
+    }
+
+    private static bool TryClipToWindow(
+        DateTimeOffset startUtc,
+        DateTimeOffset endUtc,
+        UsageQueryWindow window,
+        out DateTimeOffset clippedStart,
+        out DateTimeOffset clippedEnd)
+    {
+        clippedStart = startUtc < window.FromUtc ? window.FromUtc : startUtc;
+        clippedEnd = endUtc > window.ToUtc ? window.ToUtc : endUtc;
+        return clippedEnd > clippedStart;
     }
 
     public void Dispose() => _connection.Dispose();
