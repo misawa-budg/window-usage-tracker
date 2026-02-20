@@ -216,7 +216,7 @@ function New-PortableBundle {
         throw "Viewer package directory not found: $viewerPackageDir"
     }
 
-    $bundleName = "wintracker-portable-{0}-{1}" -f $RuntimeIdentifier, $ModeSuffix
+    $bundleName = "window-usage-tracker-portable-{0}-{1}" -f $RuntimeIdentifier, $ModeSuffix
     $bundleDir = Join-Path $ResolvedOutputRoot $bundleName
     if (Test-Path $bundleDir) {
         if ($StopRunningApps) {
@@ -331,3 +331,4 @@ foreach ($mode in $modes) {
 Write-Host ""
 Write-Host "Done."
 Write-Host "Output: $resolvedOutputRoot"
+

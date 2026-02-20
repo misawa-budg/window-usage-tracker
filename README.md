@@ -10,7 +10,7 @@ Windows 11 向けの軽量なアプリケーション利用時間トラッカー
 
 ## 実行方法
 
-配布されたZipファイル（例：`wintracker-portable-*.zip`）を展開し、中にある以下の `.cmd` ファイルをダブルクリックするだけで利用できます。
+配布されたZipファイル（例：`window-usage-tracker-portable-*.zip`）を展開し、中にある以下の `.cmd` ファイルをダブルクリックするだけで利用できます。
 いずれも同じ設定ファイル（`data/collector.db`等）を共有して動作します。
 
 1. **`Run-Collector.cmd`**: アプリの利用時間の記録を開始します。（バックグラウンドで常駐）
@@ -55,3 +55,4 @@ powershell -ExecutionPolicy Bypass -File .\release.ps1
 
 ## License
 MIT License (`LICENSE`)
+
