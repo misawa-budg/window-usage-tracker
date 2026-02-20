@@ -124,5 +124,47 @@ internal sealed class SqliteTimelineQueryService : IDisposable
         return rows;
     }
 
+    public IReadOnlyList<AppStateIntervalRow> QueryStateIntervals(UsageQueryWindow window)
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText =
+            """
+            SELECT
+                exe_name,
+                state,
+                state_start_utc,
+                state_end_utc
+            FROM app_events
+            WHERE state_end_utc > $from_utc
+              AND state_start_utc < $to_utc
+            ORDER BY state_start_utc ASC;
+            """;
+
+        command.Parameters.AddWithValue("$from_utc", window.FromUtc.ToString("O"));
+        command.Parameters.AddWithValue("$to_utc", window.ToUtc.ToString("O"));
+
+        var rows = new List<AppStateIntervalRow>();
+        using SqliteDataReader reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            DateTimeOffset startUtc = DateTimeOffset.Parse(reader.GetString(2));
+            DateTimeOffset endUtc = DateTimeOffset.Parse(reader.GetString(3));
+            DateTimeOffset clippedStart = startUtc < window.FromUtc ? window.FromUtc : startUtc;
+            DateTimeOffset clippedEnd = endUtc > window.ToUtc ? window.ToUtc : endUtc;
+            if (clippedEnd <= clippedStart)
+            {
+                continue;
+            }
+
+            rows.Add(new AppStateIntervalRow(
+                ExeName: reader.GetString(0),
+                State: reader.GetString(1),
+                StateStartUtc: clippedStart,
+                StateEndUtc: clippedEnd));
+        }
+
+        return rows;
+    }
+
     public void Dispose() => _connection.Dispose();
 }

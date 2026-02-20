@@ -34,6 +34,24 @@ public sealed class TimelineLayoutBuilder
             .ToList();
     }
 
+    public IReadOnlyList<string> BuildAppNames(IReadOnlyList<AppStateIntervalRow> intervals)
+    {
+        HashSet<string> visibleApps = BuildVisibleAppSet(intervals, MinVisibleSeconds);
+        return intervals
+            .Where(x => visibleApps.Contains(x.ExeName))
+            .GroupBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new
+            {
+                ExeName = g.Key,
+                Seconds = g.Sum(v => (v.StateEndUtc - v.StateStartUtc).TotalSeconds)
+            })
+            .Where(x => x.Seconds > 0)
+            .OrderByDescending(x => x.Seconds)
+            .ThenBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
+            .Select(x => x.ExeName)
+            .ToList();
+    }
+
     public IReadOnlyList<LegendItemLayout> BuildOverviewLegend(IReadOnlyList<TimelineUsageRow> timelineRows)
     {
         List<TimelineUsageRow> overviewRows = timelineRows
@@ -476,6 +494,204 @@ public sealed class TimelineLayoutBuilder
             rows.Add(new StateLaneLayout(
                 appName,
                 ToDuration(laneTotalSeconds),
+                accumulator.Build()));
+        }
+
+        return rows;
+    }
+
+    public IReadOnlyList<StateLaneLayout> BuildDailyAppRowsFromIntervals(
+        IReadOnlyList<AppStateIntervalRow> intervals,
+        UsageQueryWindow window,
+        double trackWidth)
+    {
+        double windowSeconds = (window.ToUtc - window.FromUtc).TotalSeconds;
+        if (windowSeconds <= 0)
+        {
+            return [];
+        }
+
+        HashSet<string> visibleApps = BuildVisibleAppSet(intervals, MinVisibleSeconds);
+        IReadOnlyList<string> appNames = BuildAppNames(intervals)
+            .Where(visibleApps.Contains)
+            .Take(_topAppCount)
+            .ToList();
+
+        var rows = new List<StateLaneLayout>(appNames.Count);
+        foreach (string appName in appNames)
+        {
+            List<AppStateIntervalRow> appIntervals = intervals
+                .Where(x => string.Equals(x.ExeName, appName, StringComparison.OrdinalIgnoreCase) &&
+                            x.StateEndUtc > window.FromUtc &&
+                            x.StateStartUtc < window.ToUtc)
+                .Select(x =>
+                {
+                    DateTimeOffset startUtc = x.StateStartUtc < window.FromUtc ? window.FromUtc : x.StateStartUtc;
+                    DateTimeOffset endUtc = x.StateEndUtc > window.ToUtc ? window.ToUtc : x.StateEndUtc;
+                    return new AppStateIntervalRow(x.ExeName, x.State, startUtc, endUtc);
+                })
+                .Where(x => x.StateEndUtc > x.StateStartUtc)
+                .ToList();
+
+            var boundaries = new List<DateTimeOffset>(appIntervals.Count * 2 + 2)
+            {
+                window.FromUtc,
+                window.ToUtc
+            };
+            boundaries.AddRange(appIntervals.Select(x => x.StateStartUtc));
+            boundaries.AddRange(appIntervals.Select(x => x.StateEndUtc));
+            List<DateTimeOffset> orderedBoundaries = boundaries
+                .Distinct()
+                .OrderBy(x => x)
+                .ToList();
+
+            var accumulator = new SegmentAccumulator();
+            double laneTotalSeconds = 0;
+
+            for (int index = 0; index < orderedBoundaries.Count - 1; index++)
+            {
+                DateTimeOffset sliceStartUtc = orderedBoundaries[index];
+                DateTimeOffset sliceEndUtc = orderedBoundaries[index + 1];
+                if (sliceEndUtc <= sliceStartUtc)
+                {
+                    continue;
+                }
+
+                double sliceSeconds = (sliceEndUtc - sliceStartUtc).TotalSeconds;
+                double sliceWidth = trackWidth * (sliceSeconds / windowSeconds);
+
+                List<AppStateIntervalRow> candidates = appIntervals
+                    .Where(x => x.StateStartUtc < sliceEndUtc && x.StateEndUtc > sliceStartUtc)
+                    .ToList();
+
+                if (candidates.Count == 0)
+                {
+                    accumulator.AddNoData(sliceWidth);
+                    continue;
+                }
+
+                string state = SelectDominantState(candidates);
+                laneTotalSeconds += sliceSeconds;
+                accumulator.AddData(
+                    sliceWidth,
+                    ColorForAppState(appName, state),
+                    $"{appName}|{state}",
+                    $"{appName} | {state}",
+                    sliceStartUtc.ToLocalTime(),
+                    sliceEndUtc.ToLocalTime(),
+                    sliceSeconds);
+            }
+
+            rows.Add(new StateLaneLayout(
+                appName,
+                ToDuration(laneTotalSeconds),
+                accumulator.Build()));
+        }
+
+        return rows;
+    }
+
+    public IReadOnlyList<TimelineRowLayout> BuildAppTimelineRowsFromIntervals(
+        IReadOnlyList<AppStateIntervalRow> intervals,
+        UsageQueryWindow window,
+        string appName,
+        double trackWidth)
+    {
+        if (string.IsNullOrWhiteSpace(appName))
+        {
+            return [];
+        }
+
+        HashSet<string> visibleApps = BuildVisibleAppSet(intervals, MinVisibleSeconds);
+        if (!visibleApps.Contains(appName))
+        {
+            return [];
+        }
+
+        var rows = new List<TimelineRowLayout>();
+        foreach (DateTimeOffset dayStart in EnumerateDayBuckets(window))
+        {
+            DateTimeOffset dayEnd = dayStart.AddDays(1);
+            if (dayEnd > window.ToUtc)
+            {
+                dayEnd = window.ToUtc;
+            }
+
+            double daySeconds = (dayEnd - dayStart).TotalSeconds;
+            if (daySeconds <= 0)
+            {
+                rows.Add(new TimelineRowLayout(
+                    FormatBucketLabel(dayStart, dayEnd),
+                    "00:00",
+                    [new SegmentLayout(trackWidth, NoDataTooltip, string.Empty, true)]));
+                continue;
+            }
+
+            List<AppStateIntervalRow> dayIntervals = intervals
+                .Where(x => string.Equals(x.ExeName, appName, StringComparison.OrdinalIgnoreCase) &&
+                            x.StateEndUtc > dayStart &&
+                            x.StateStartUtc < dayEnd)
+                .Select(x =>
+                {
+                    DateTimeOffset startUtc = x.StateStartUtc < dayStart ? dayStart : x.StateStartUtc;
+                    DateTimeOffset endUtc = x.StateEndUtc > dayEnd ? dayEnd : x.StateEndUtc;
+                    return new AppStateIntervalRow(x.ExeName, x.State, startUtc, endUtc);
+                })
+                .Where(x => x.StateEndUtc > x.StateStartUtc)
+                .ToList();
+
+            var boundaries = new List<DateTimeOffset>(dayIntervals.Count * 2 + 2)
+            {
+                dayStart,
+                dayEnd
+            };
+            boundaries.AddRange(dayIntervals.Select(x => x.StateStartUtc));
+            boundaries.AddRange(dayIntervals.Select(x => x.StateEndUtc));
+            List<DateTimeOffset> orderedBoundaries = boundaries
+                .Distinct()
+                .OrderBy(x => x)
+                .ToList();
+
+            var accumulator = new SegmentAccumulator();
+            double dayTotalSeconds = 0;
+
+            for (int index = 0; index < orderedBoundaries.Count - 1; index++)
+            {
+                DateTimeOffset sliceStartUtc = orderedBoundaries[index];
+                DateTimeOffset sliceEndUtc = orderedBoundaries[index + 1];
+                if (sliceEndUtc <= sliceStartUtc)
+                {
+                    continue;
+                }
+
+                double sliceSeconds = (sliceEndUtc - sliceStartUtc).TotalSeconds;
+                double sliceWidth = trackWidth * (sliceSeconds / daySeconds);
+
+                List<AppStateIntervalRow> candidates = dayIntervals
+                    .Where(x => x.StateStartUtc < sliceEndUtc && x.StateEndUtc > sliceStartUtc)
+                    .ToList();
+
+                if (candidates.Count == 0)
+                {
+                    accumulator.AddNoData(sliceWidth);
+                    continue;
+                }
+
+                string state = SelectDominantState(candidates);
+                dayTotalSeconds += sliceSeconds;
+                accumulator.AddData(
+                    sliceWidth,
+                    ColorForAppState(appName, state),
+                    $"{appName}|{state}",
+                    $"{appName} | {state}",
+                    sliceStartUtc.ToLocalTime(),
+                    sliceEndUtc.ToLocalTime(),
+                    sliceSeconds);
+            }
+
+            rows.Add(new TimelineRowLayout(
+                FormatBucketLabel(dayStart, dayEnd),
+                ToDuration(dayTotalSeconds),
                 accumulator.Build()));
         }
 
@@ -1093,6 +1309,43 @@ public sealed class TimelineLayoutBuilder
             .Where(g => g.Sum(v => (v.StateEndUtc - v.StateStartUtc).TotalSeconds) >= minVisibleSeconds)
             .Select(g => g.Key)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static HashSet<string> BuildVisibleAppSet(IReadOnlyList<AppStateIntervalRow> intervals, double minVisibleSeconds)
+    {
+        return intervals
+            .GroupBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Sum(v => (v.StateEndUtc - v.StateStartUtc).TotalSeconds) >= minVisibleSeconds)
+            .Select(g => g.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string SelectDominantState(IReadOnlyList<AppStateIntervalRow> candidates) =>
+        candidates
+            .OrderByDescending(x => StatePriority(x.State))
+            .ThenByDescending(x => x.StateStartUtc)
+            .ThenBy(x => x.State, StringComparer.OrdinalIgnoreCase)
+            .First()
+            .State;
+
+    private static int StatePriority(string state)
+    {
+        if (string.Equals(state, "Active", StringComparison.OrdinalIgnoreCase))
+        {
+            return 3;
+        }
+
+        if (string.Equals(state, "Open", StringComparison.OrdinalIgnoreCase))
+        {
+            return 2;
+        }
+
+        if (string.Equals(state, "Minimized", StringComparison.OrdinalIgnoreCase))
+        {
+            return 1;
+        }
+
+        return 0;
     }
 
     private static void AddNoDataSegment(ICollection<SegmentLayout> segments, double width)

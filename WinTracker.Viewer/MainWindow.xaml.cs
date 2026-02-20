@@ -38,6 +38,7 @@ public sealed partial class MainWindow : Window
 
     private IReadOnlyList<TimelineUsageRow> _timelineRows = [];
     private IReadOnlyList<ActiveIntervalRow> _activeIntervals = [];
+    private IReadOnlyList<AppStateIntervalRow> _stateIntervals = [];
     private UsageQueryWindow _currentWindow = CreateLocalDay24hWindow();
     private CancellationTokenSource? _reloadCts;
     private bool _isInitialized;
@@ -178,12 +179,13 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
-            (_timelineRows, _activeIntervals) = await Task.Run(() =>
+            (_timelineRows, _activeIntervals, _stateIntervals) = await Task.Run(() =>
             {
                 using var query = new SqliteTimelineQueryService(dbPath);
                 return (
                     query.QueryTimeline(_currentWindow),
-                    query.QueryActiveIntervals(_currentWindow));
+                    query.QueryActiveIntervals(_currentWindow),
+                    query.QueryStateIntervals(_currentWindow));
             }, token);
 
             if (GetRangeLabel() == "24h")
@@ -339,7 +341,7 @@ public sealed partial class MainWindow : Window
     private void RebuildAppNames()
     {
         string? current = AppComboBox.SelectedItem as string;
-        IReadOnlyList<string> appNames = _layoutBuilder.BuildAppNames(_timelineRows);
+        IReadOnlyList<string> appNames = _layoutBuilder.BuildAppNames(_stateIntervals);
 
         _appNames.Clear();
         foreach (string app in appNames)
@@ -406,8 +408,8 @@ public sealed partial class MainWindow : Window
     private void BuildAppDailyRows()
     {
         _appDailyLanes.Clear();
-        IReadOnlyList<StateLaneLayout> lanes = _layoutBuilder.BuildDailyAppRows(
-            _timelineRows,
+        IReadOnlyList<StateLaneLayout> lanes = _layoutBuilder.BuildDailyAppRowsFromIntervals(
+            _stateIntervals,
             _currentWindow,
             DailyTrackWidth);
 
@@ -430,8 +432,8 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        IReadOnlyList<TimelineRowLayout> rows = _layoutBuilder.BuildAppTimelineRows(
-            _timelineRows,
+        IReadOnlyList<TimelineRowLayout> rows = _layoutBuilder.BuildAppTimelineRowsFromIntervals(
+            _stateIntervals,
             _currentWindow,
             app,
             DailyTrackWidth);
@@ -493,6 +495,7 @@ public sealed partial class MainWindow : Window
     {
         _timelineRows = [];
         _activeIntervals = [];
+        _stateIntervals = [];
         _overviewRows.Clear();
         _overviewDailyRows.Clear();
         _appDailyLanes.Clear();

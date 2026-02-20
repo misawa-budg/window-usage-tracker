@@ -22,3 +22,9 @@ public readonly record struct ActiveIntervalRow(
     string ExeName,
     DateTimeOffset StateStartUtc,
     DateTimeOffset StateEndUtc);
+
+public readonly record struct AppStateIntervalRow(
+    string ExeName,
+    string State,
+    DateTimeOffset StateStartUtc,
+    DateTimeOffset StateEndUtc);
