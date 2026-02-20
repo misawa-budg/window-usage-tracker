@@ -61,7 +61,7 @@ public sealed class TimelineLayoutBuilderTests
     }
 
     [Fact]
-    public void BuildDailyStateStackRows_ReturnsSingleRunningRow_AndSplitsConcurrentApps()
+    public void BuildDailyStateStackRows_ReturnsSingleActiveRow_AndUsesTopAppPerBucket()
     {
         var builder = new TimelineLayoutBuilder();
         UsageQueryWindow window = new(
@@ -77,15 +77,15 @@ public sealed class TimelineLayoutBuilderTests
         ];
 
         IReadOnlyList<StateStackRowLayout> result = builder.BuildDailyStateStackRows(rows, window, trackWidth: 960);
-        StateStackRowLayout running = Assert.Single(result);
-        Assert.Equal("Running", running.Label);
-        AssertApproximately(running.Columns.Sum(x => x.Width), 960);
-        Assert.Contains(running.Columns, x => x.Entries.Count == 2);
-        Assert.Contains(running.Columns, x => x.Entries.Count == 1);
+        StateStackRowLayout active = Assert.Single(result);
+        Assert.Equal("Active", active.Label);
+        AssertApproximately(active.Columns.Sum(x => x.Width), 960);
+        Assert.Equal(1, active.Columns.Count(x => !x.IsNoData));
+        Assert.All(active.Columns.Where(x => !x.IsNoData), x => Assert.Single(x.Entries));
     }
 
     [Fact]
-    public void BuildDailyStateStackRows_NormalizesSameAppAcrossStatesWithinSameBucket()
+    public void BuildDailyStateStackRows_IgnoresNonActiveStatesWithinSameBucket()
     {
         var builder = new TimelineLayoutBuilder();
         UsageQueryWindow window = new(
@@ -95,19 +95,22 @@ public sealed class TimelineLayoutBuilderTests
 
         IReadOnlyList<TimelineUsageRow> rows =
         [
-            new(Utc(2026, 2, 19, 0, 10, 0), "devenv.exe", "Active", 150),
-            new(Utc(2026, 2, 19, 0, 10, 0), "devenv.exe", "Open", 150)
+            new(Utc(2026, 2, 19, 0, 10, 0), "devenv.exe", "Active", 300),
+            new(Utc(2026, 2, 19, 0, 10, 0), "devenv.exe", "Open", 150),
+            new(Utc(2026, 2, 19, 0, 10, 0), "powershell.exe", "Open", 300)
         ];
 
         IReadOnlyList<StateStackRowLayout> result = builder.BuildDailyStateStackRows(rows, window, trackWidth: 960);
-        StateStackRowLayout running = Assert.Single(result);
-        StackedColumnLayout column = Assert.Single(running.Columns, x => !x.IsNoData);
+        StateStackRowLayout active = Assert.Single(result);
+        StackedColumnLayout column = Assert.Single(active.Columns, x => !x.IsNoData);
         StackedEntryLayout entry = Assert.Single(column.Entries);
         Assert.Contains("devenv.exe", entry.Tooltip);
+        Assert.DoesNotContain(column.Entries, x => x.Label == "powershell.exe");
+        Assert.Equal("00:01", active.TotalLabel);
     }
 
     [Fact]
-    public void BuildDailyStateStackRows_OrdersConcurrentAppsByName()
+    public void BuildDailyStateStackRows_PicksAlphabeticalTopAppWhenSecondsTie()
     {
         var builder = new TimelineLayoutBuilder();
         UsageQueryWindow window = new(
@@ -123,10 +126,11 @@ public sealed class TimelineLayoutBuilderTests
         ];
 
         IReadOnlyList<StateStackRowLayout> result = builder.BuildDailyStateStackRows(rows, window, trackWidth: 960);
-        StateStackRowLayout running = Assert.Single(result);
-        StackedColumnLayout column = Assert.Single(running.Columns, x => !x.IsNoData);
+        StateStackRowLayout active = Assert.Single(result);
+        StackedColumnLayout column = Assert.Single(active.Columns, x => !x.IsNoData);
 
-        Assert.Equal(["devenv.exe", "msedge.exe", "powershell.exe"], column.Entries.Select(x => x.Label).ToArray());
+        Assert.Single(column.Entries);
+        Assert.Equal("devenv.exe", column.Entries[0].Label);
     }
 
     [Fact]
@@ -217,7 +221,7 @@ public sealed class TimelineLayoutBuilderTests
     }
 
     [Fact]
-    public void BuildAppTimelineRows_FillsHourBucketWhenAppHasData()
+    public void BuildAppTimelineRows_UsesProportionalWidthWithinHourBucket()
     {
         var builder = new TimelineLayoutBuilder();
         UsageQueryWindow window = CreateWeekWindow(Utc(2026, 2, 13, 0, 0, 0));
@@ -230,9 +234,10 @@ public sealed class TimelineLayoutBuilderTests
         IReadOnlyList<TimelineRowLayout> result = builder.BuildAppTimelineRows(rows, window, "devenv.exe", trackWidth: 960);
         TimelineRowLayout day = result[0];
         double hourWidth = 960.0 / 24.0;
+        double expectedWidth = hourWidth * (900.0 / 3600.0);
         double coloredWidth = day.Segments.Where(x => !x.IsNoData).Sum(x => x.Width);
 
-        AssertApproximately(coloredWidth, hourWidth);
+        AssertApproximately(coloredWidth, expectedWidth);
     }
 
     [Fact]
@@ -359,7 +364,24 @@ public sealed class TimelineLayoutBuilderTests
         Assert.Equal("a.exe", legend[0].Label);
         Assert.Equal("b.exe", legend[1].Label);
         Assert.Equal(TimelineLayoutBuilder.OtherLabel, legend[2].Label);
-        Assert.Equal(TimelineLayoutBuilder.OtherColorHex, legend[2].ColorHex);
+        Assert.Equal(TimelineLayoutBuilder.OtherColorKey, legend[2].ColorHex);
+    }
+
+    [Fact]
+    public void BuildOverviewLegend_UsesActiveOnlyRows()
+    {
+        var builder = new TimelineLayoutBuilder(topAppCount: 8);
+        IReadOnlyList<TimelineUsageRow> rows =
+        [
+            Row(2026, 2, 19, 0, "a.exe", "Active", 7200),
+            Row(2026, 2, 19, 1, "b.exe", "Open", 7200),
+            Row(2026, 2, 19, 2, "c.exe", "Minimized", 7200)
+        ];
+
+        IReadOnlyList<LegendItemLayout> legend = builder.BuildOverviewLegend(rows);
+
+        LegendItemLayout item = Assert.Single(legend);
+        Assert.Equal("a.exe", item.Label);
     }
 
     [Fact]

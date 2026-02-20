@@ -9,6 +9,7 @@ public sealed class TimelineLayoutBuilder
     public const string OpenColorKey = "BrushStateOpen";
     public const string MinimizedColorKey = "BrushStateMinimized";
     private const double MinVisibleSeconds = 300.0;
+    private const string OverviewState = "Active";
 
     private static readonly string[] AppStates = ["Active", "Open", "Minimized"];
 
@@ -35,8 +36,12 @@ public sealed class TimelineLayoutBuilder
 
     public IReadOnlyList<LegendItemLayout> BuildOverviewLegend(IReadOnlyList<TimelineUsageRow> timelineRows)
     {
-        HashSet<string> visibleApps = BuildVisibleAppSet(timelineRows, MinVisibleSeconds);
-        var apps = timelineRows
+        List<TimelineUsageRow> overviewRows = timelineRows
+            .Where(x => string.Equals(x.State, OverviewState, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        HashSet<string> visibleApps = BuildVisibleAppSet(overviewRows, MinVisibleSeconds);
+        var apps = overviewRows
             .Where(x => visibleApps.Contains(x.ExeName))
             .GroupBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
             .Select(g => new { ExeName = g.Key, Seconds = g.Sum(x => x.Seconds) })
@@ -452,11 +457,15 @@ public sealed class TimelineLayoutBuilder
         UsageQueryWindow window,
         double trackWidth)
     {
+        List<TimelineUsageRow> activeRows = timelineRows
+            .Where(x => string.Equals(x.State, OverviewState, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
         int bucketCount = CalculateBucketCount(window);
         double bucketWidth = trackWidth / bucketCount;
         DateTimeOffset fromUtc = window.FromUtc;
-        HashSet<string> visibleApps = BuildVisibleAppSet(timelineRows, MinVisibleSeconds);
-        var byBucket = timelineRows
+        HashSet<string> visibleApps = BuildVisibleAppSet(activeRows, MinVisibleSeconds);
+        var byBucket = activeRows
             .Where(x => visibleApps.Contains(x.ExeName))
             .Select(x => new
             {
@@ -477,7 +486,7 @@ public sealed class TimelineLayoutBuilder
                     .OrderBy(v => v.ExeName, StringComparer.OrdinalIgnoreCase)
                     .ToList());
 
-        var accumulator = new StateStackAccumulator("Running");
+        var accumulator = new StateStackAccumulator(OverviewState);
         double totalSeconds = 0;
 
         for (int bucketIndex = 0; bucketIndex < bucketCount; bucketIndex++)
@@ -517,7 +526,7 @@ public sealed class TimelineLayoutBuilder
         return
         [
             new StateStackRowLayout(
-                "Running",
+                OverviewState,
                 ToDuration(totalSeconds),
                 accumulator.Build())
         ];
@@ -547,11 +556,11 @@ public sealed class TimelineLayoutBuilder
                 .Where(x => x.BucketStartUtc >= dayStart && x.BucketStartUtc < dayEnd)
                 .ToList();
 
-            StateStackRowLayout running = BuildDailyStateStackRows(dayRows, dayWindow, trackWidth)[0];
+            StateStackRowLayout active = BuildDailyStateStackRows(dayRows, dayWindow, trackWidth)[0];
             rows.Add(new StateStackRowLayout(
                 $"{dayStart.ToLocalTime():MM/dd (ddd)}",
-                running.TotalLabel,
-                running.Columns));
+                active.TotalLabel,
+                active.Columns));
         }
 
         return rows;
