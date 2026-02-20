@@ -6,21 +6,20 @@
     Title="WinTracker Viewer">
 
     <Grid
-        Background="{StaticResource BrushPageBackground}"
-        UseLayoutRounding="True"
-        RequestedTheme="Light">
+        Background="{ThemeResource BrushPageBackground}"
+        UseLayoutRounding="True">
         <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="28" Spacing="16">
                 <Grid>
                     <Border
                         Margin="0,4,0,0"
-                        Background="{StaticResource BrushCardShadow}"
+                        Background="{ThemeResource BrushCardShadow}"
                         CornerRadius="{StaticResource RadiusCard}" />
                     <Border
                         x:Name="HeaderCard"
                         Padding="20"
-                        Background="{StaticResource BrushCardBackground}"
-                        BorderBrush="{StaticResource BrushBorderSoft}"
+                        Background="{ThemeResource BrushCardBackground}"
+                        BorderBrush="{ThemeResource BrushBorderSoft}"
                         BorderThickness="1"
                         CornerRadius="{StaticResource RadiusCard}">
                         <Grid>
@@ -32,11 +31,11 @@
                                 <TextBlock
                                     FontSize="34"
                                     FontWeight="SemiBold"
-                                    Foreground="{StaticResource BrushTextPrimary}"
+                                    Foreground="{ThemeResource BrushTextPrimary}"
                                     Text="WinTracker Viewer" />
                                 <TextBlock
                                     FontSize="12"
-                                    Foreground="{StaticResource BrushTextSecondary}"
+                                    Foreground="{ThemeResource BrushTextSecondary}"
                                     Text="Application usage timeline" />
                             </StackPanel>
                             <TextBlock
@@ -44,7 +43,7 @@
                                 Grid.Column="1"
                                 VerticalAlignment="Center"
                                 FontSize="12"
-                                Foreground="{StaticResource BrushTextSecondary}"
+                                Foreground="{ThemeResource BrushTextSecondary}"
                                 Text="Ready" />
                         </Grid>
                     </Border>
@@ -53,13 +52,13 @@
                 <Grid>
                     <Border
                         Margin="0,4,0,0"
-                        Background="{StaticResource BrushCardShadow}"
+                        Background="{ThemeResource BrushCardShadow}"
                         CornerRadius="{StaticResource RadiusCard}" />
                     <Border
                         x:Name="ControlCard"
                         Padding="20"
-                        Background="{StaticResource BrushCardBackground}"
-                        BorderBrush="{StaticResource BrushBorderSoft}"
+                        Background="{ThemeResource BrushCardBackground}"
+                        BorderBrush="{ThemeResource BrushBorderSoft}"
                         BorderThickness="1"
                         CornerRadius="{StaticResource RadiusCard}">
                         <Grid>
@@ -73,7 +72,7 @@
                             <TextBlock
                                 VerticalAlignment="Center"
                                 FontSize="14"
-                                Foreground="{StaticResource BrushTextPrimary}"
+                                Foreground="{ThemeResource BrushTextPrimary}"
                                 Text="期間" />
                             <ComboBox
                                 x:Name="RangeComboBox"
@@ -91,18 +90,14 @@
                                 HorizontalAlignment="Right"
                                 MinHeight="40"
                                 Padding="16,10"
-                                Background="{StaticResource BrushCardBackground}"
+                                Background="{ThemeResource BrushCardBackground}"
                                 BorderBrush="{ThemeResource ComboBoxBorderBrush}"
                                 BorderThickness="2"
-                                Foreground="{StaticResource BrushTextPrimary}"
+                                Foreground="{ThemeResource BrushTextPrimary}"
                                 FontSize="14"
                                 FontWeight="Normal"
                                 CornerRadius="4"
                                 Click="OnRefreshClicked"
-                                PointerEntered="OnRefreshButtonPointerEntered"
-                                PointerExited="OnRefreshButtonPointerExited"
-                                PointerPressed="OnRefreshButtonPointerPressed"
-                                PointerReleased="OnRefreshButtonPointerReleased"
                                 Content="更新" />
                         </Grid>
                     </Border>
@@ -111,12 +106,12 @@
                 <Grid>
                     <Border
                         Margin="0,4,0,0"
-                        Background="{StaticResource BrushCardShadow}"
+                        Background="{ThemeResource BrushCardShadow}"
                         CornerRadius="{StaticResource RadiusCard}" />
                     <Border
                         Padding="20"
-                        Background="{StaticResource BrushCardBackground}"
-                        BorderBrush="{StaticResource BrushBorderSoft}"
+                        Background="{ThemeResource BrushCardBackground}"
+                        BorderBrush="{ThemeResource BrushBorderSoft}"
                         BorderThickness="1"
                         CornerRadius="{StaticResource RadiusCard}">
                         <StackPanel Spacing="22">
@@ -124,7 +119,7 @@
                                 <TextBlock
                                     FontSize="14"
                                     FontWeight="SemiBold"
-                                    Foreground="{StaticResource BrushTextPrimary}"
+                                    Foreground="{ThemeResource BrushTextPrimary}"
                                     Text="一覧タイムライン" />
                                 <Grid Margin="0,10,0,0">
                                     <Grid.RowDefinitions>
@@ -138,8 +133,8 @@
                                         Grid.Row="0"
                                         Margin="0,10,0,10"
                                         Padding="14"
-                                        Background="{StaticResource BrushCardBackgroundSoft}"
-                                        BorderBrush="{StaticResource BrushBorderSoft}"
+                                        Background="{ThemeResource BrushCardBackgroundSoft}"
+                                        BorderBrush="{ThemeResource BrushBorderSoft}"
                                         BorderThickness="1"
                                         CornerRadius="14">
                                         <ItemsControl x:Name="OverviewLegendItemsControl">
@@ -160,7 +155,7 @@
                                                         <TextBlock
                                                             VerticalAlignment="Center"
                                                             FontSize="12"
-                                                            Foreground="{StaticResource BrushTextSecondary}"
+                                                            Foreground="{ThemeResource BrushTextSecondary}"
                                                             Text="{x:Bind Label}" />
                                                     </StackPanel>
                                                 </DataTemplate>
@@ -182,8 +177,8 @@
                                         <Border
                                             Margin="0,0,0,12"
                                             Padding="14"
-                                            Background="{StaticResource BrushCardBackgroundSoft}"
-                                            BorderBrush="{StaticResource BrushBorderSoft}"
+                                            Background="{ThemeResource BrushCardBackgroundSoft}"
+                                            BorderBrush="{ThemeResource BrushBorderSoft}"
                                             BorderThickness="1"
                                             CornerRadius="14">
                                             <Grid>
@@ -196,7 +191,7 @@
                                                 x:Name="OverviewHeaderLabelTextBlock"
                                                 VerticalAlignment="Center"
                                                 FontSize="12"
-                                                Foreground="{StaticResource BrushTextSecondary}"
+                                                Foreground="{ThemeResource BrushTextSecondary}"
                                                 Text="State" />
                                                 <Grid Grid.Column="1">
                                                     <Grid.ColumnDefinitions>
@@ -211,42 +206,42 @@
                                                         Grid.Column="0"
                                                         HorizontalAlignment="Left"
                                                         FontSize="12"
-                                                        Foreground="{StaticResource BrushTextSecondary}"
+                                                        Foreground="{ThemeResource BrushTextSecondary}"
                                                         Text="00:00" />
                                                     <TextBlock
                                                         x:Name="Tick06TextBlock"
                                                         Grid.Column="1"
                                                         HorizontalAlignment="Center"
                                                         FontSize="12"
-                                                        Foreground="{StaticResource BrushTextSecondary}"
+                                                        Foreground="{ThemeResource BrushTextSecondary}"
                                                         Text="06:00" />
                                                     <TextBlock
                                                         x:Name="Tick12TextBlock"
                                                         Grid.Column="2"
                                                         HorizontalAlignment="Center"
                                                         FontSize="12"
-                                                        Foreground="{StaticResource BrushTextSecondary}"
+                                                        Foreground="{ThemeResource BrushTextSecondary}"
                                                         Text="12:00" />
                                                     <TextBlock
                                                         x:Name="Tick18TextBlock"
                                                         Grid.Column="3"
                                                         HorizontalAlignment="Center"
                                                         FontSize="12"
-                                                        Foreground="{StaticResource BrushTextSecondary}"
+                                                        Foreground="{ThemeResource BrushTextSecondary}"
                                                         Text="18:00" />
                                                     <TextBlock
                                                         x:Name="Tick24TextBlock"
                                                         Grid.Column="4"
                                                         HorizontalAlignment="Right"
                                                         FontSize="12"
-                                                        Foreground="{StaticResource BrushTextSecondary}"
+                                                        Foreground="{ThemeResource BrushTextSecondary}"
                                                         Text="24:00" />
                                                 </Grid>
                                                 <TextBlock
                                                     Grid.Column="2"
                                                     HorizontalAlignment="Right"
                                                     FontSize="12"
-                                                    Foreground="{StaticResource BrushTextSecondary}"
+                                                    Foreground="{ThemeResource BrushTextSecondary}"
                                                     Text="Total" />
                                             </Grid>
                                         </Border>
@@ -262,8 +257,8 @@
                                                     <Border
                                                         Margin="0,0,0,12"
                                                         Padding="14"
-                                                        Background="{StaticResource BrushCardBackgroundSoft}"
-                                                        BorderBrush="{StaticResource BrushBorderSoft}"
+                                                        Background="{ThemeResource BrushCardBackgroundSoft}"
+                                                        BorderBrush="{ThemeResource BrushBorderSoft}"
                                                         BorderThickness="1"
                                                         CornerRadius="14"
                                                         PointerEntered="OnCardPointerEntered"
@@ -280,17 +275,17 @@
                                                                 VerticalAlignment="Center"
                                                                 FontSize="14"
                                                                 FontWeight="SemiBold"
-                                                                Foreground="{StaticResource BrushTextPrimary}"
+                                                                Foreground="{ThemeResource BrushTextPrimary}"
                                                                 Text="{x:Bind Label}" />
 
                                                             <Border
                                                                 Grid.Column="1"
                                                                 Height="50"
-                                                                Background="{StaticResource BrushRail}"
+                                                                Background="{ThemeResource BrushRail}"
                                                                 CornerRadius="{StaticResource RadiusPill}">
                                                                 <Viewbox Stretch="Fill" StretchDirection="Both">
                                                                     <Grid Width="960" Height="50">
-                                                                        <ItemsControl ItemsSource="{x:Bind Columns}">
+                                                                        <ItemsControl ItemsSource="{x:Bind Columns}" UseLayoutRounding="False">
                                                                             <ItemsControl.ItemsPanel>
                                                                                 <ItemsPanelTemplate>
                                                                                     <StackPanel Orientation="Horizontal" />
@@ -331,7 +326,7 @@
                                                                 VerticalAlignment="Center"
                                                                 HorizontalAlignment="Right"
                                                                 FontSize="14"
-                                                                Foreground="{StaticResource BrushTextPrimary}"
+                                                                Foreground="{ThemeResource BrushTextPrimary}"
                                                                 Text="{x:Bind TotalLabel}" />
                                                         </Grid>
                                                     </Border>
@@ -345,8 +340,8 @@
                                         Grid.Row="2"
                                         Margin="0,0,0,12"
                                         Padding="14"
-                                        Background="{StaticResource BrushCardBackgroundSoft}"
-                                        BorderBrush="{StaticResource BrushBorderSoft}"
+                                        Background="{ThemeResource BrushCardBackgroundSoft}"
+                                        BorderBrush="{ThemeResource BrushBorderSoft}"
                                         BorderThickness="1"
                                         CornerRadius="14"
                                         Visibility="Collapsed">
@@ -359,7 +354,7 @@
                                             <TextBlock
                                                 VerticalAlignment="Center"
                                                 FontSize="12"
-                                                Foreground="{StaticResource BrushTextSecondary}"
+                                                Foreground="{ThemeResource BrushTextSecondary}"
                                                 Text="Date" />
                                             <Grid Grid.Column="1">
                                                 <Grid.ColumnDefinitions>
@@ -374,35 +369,35 @@
                                                     Grid.Column="0"
                                                     HorizontalAlignment="Left"
                                                     FontSize="12"
-                                                    Foreground="{StaticResource BrushTextSecondary}"
+                                                    Foreground="{ThemeResource BrushTextSecondary}"
                                                     Text="00:00" />
                                                 <TextBlock
                                                     x:Name="WeekTick06TextBlock"
                                                     Grid.Column="1"
                                                     HorizontalAlignment="Center"
                                                     FontSize="12"
-                                                    Foreground="{StaticResource BrushTextSecondary}"
+                                                    Foreground="{ThemeResource BrushTextSecondary}"
                                                     Text="06:00" />
                                                 <TextBlock
                                                     x:Name="WeekTick12TextBlock"
                                                     Grid.Column="2"
                                                     HorizontalAlignment="Center"
                                                     FontSize="12"
-                                                    Foreground="{StaticResource BrushTextSecondary}"
+                                                    Foreground="{ThemeResource BrushTextSecondary}"
                                                     Text="12:00" />
                                                 <TextBlock
                                                     x:Name="WeekTick18TextBlock"
                                                     Grid.Column="3"
                                                     HorizontalAlignment="Center"
                                                     FontSize="12"
-                                                    Foreground="{StaticResource BrushTextSecondary}"
+                                                    Foreground="{ThemeResource BrushTextSecondary}"
                                                     Text="18:00" />
                                                 <TextBlock
                                                     x:Name="WeekTick24TextBlock"
                                                     Grid.Column="4"
                                                     HorizontalAlignment="Right"
                                                     FontSize="12"
-                                                    Foreground="{StaticResource BrushTextSecondary}"
+                                                    Foreground="{ThemeResource BrushTextSecondary}"
                                                     Text="24:00" />
                                             </Grid>
                                             <TextBlock
@@ -410,7 +405,7 @@
                                                 HorizontalAlignment="Right"
                                                 VerticalAlignment="Center"
                                                 FontSize="12"
-                                                Foreground="{StaticResource BrushTextSecondary}"
+                                                Foreground="{ThemeResource BrushTextSecondary}"
                                                 Text="Total" />
                                         </Grid>
                                     </Border>
@@ -426,8 +421,8 @@
                                                 <Border
                                                     Margin="0,0,0,12"
                                                     Padding="14"
-                                                    Background="{StaticResource BrushCardBackgroundSoft}"
-                                                    BorderBrush="{StaticResource BrushBorderSoft}"
+                                                    Background="{ThemeResource BrushCardBackgroundSoft}"
+                                                    BorderBrush="{ThemeResource BrushBorderSoft}"
                                                     BorderThickness="1"
                                                     CornerRadius="14"
                                                     PointerEntered="OnCardPointerEntered"
@@ -443,17 +438,17 @@
                                                         <TextBlock
                                                             VerticalAlignment="Center"
                                                             FontSize="14"
-                                                            Foreground="{StaticResource BrushTextPrimary}"
+                                                            Foreground="{ThemeResource BrushTextPrimary}"
                                                             Text="{x:Bind BucketLabel}" />
 
                                                         <Border
                                                             Grid.Column="1"
                                                             Height="50"
-                                                            Background="{StaticResource BrushRail}"
+                                                            Background="{ThemeResource BrushRail}"
                                                             CornerRadius="{StaticResource RadiusPill}">
                                                             <Viewbox Stretch="Fill" StretchDirection="Both">
                                                                 <Grid Width="760" Height="50">
-                                                                    <ItemsControl ItemsSource="{x:Bind Segments}">
+                                                                    <ItemsControl ItemsSource="{x:Bind Segments}" UseLayoutRounding="False">
                                                                         <ItemsControl.ItemsPanel>
                                                                             <ItemsPanelTemplate>
                                                                                 <StackPanel Orientation="Horizontal" />
@@ -482,7 +477,7 @@
                                                             VerticalAlignment="Center"
                                                             HorizontalAlignment="Right"
                                                             FontSize="14"
-                                                            Foreground="{StaticResource BrushTextPrimary}"
+                                                            Foreground="{ThemeResource BrushTextPrimary}"
                                                             Text="{x:Bind TotalLabel}" />
                                                     </Grid>
                                                 </Border>
@@ -497,7 +492,7 @@
                                 <TextBlock
                                     FontSize="14"
                                     FontWeight="SemiBold"
-                                    Foreground="{StaticResource BrushTextPrimary}"
+                                    Foreground="{ThemeResource BrushTextPrimary}"
                                     Text="アプリ別タイムライン" />
                                 <Grid Margin="0,10,0,0">
                                     <Grid.RowDefinitions>
@@ -513,8 +508,8 @@
                                         Grid.Row="0"
                                         Margin="0,10,0,10"
                                         Padding="14"
-                                        Background="{StaticResource BrushCardBackgroundSoft}"
-                                        BorderBrush="{StaticResource BrushBorderSoft}"
+                                        Background="{ThemeResource BrushCardBackgroundSoft}"
+                                        BorderBrush="{ThemeResource BrushBorderSoft}"
                                         BorderThickness="1"
                                         CornerRadius="14">
                                         <ItemsControl x:Name="AppLegendItemsControl">
@@ -535,7 +530,7 @@
                                                         <TextBlock
                                                             VerticalAlignment="Center"
                                                             FontSize="12"
-                                                            Foreground="{StaticResource BrushTextSecondary}"
+                                                            Foreground="{ThemeResource BrushTextSecondary}"
                                                             Text="{x:Bind Label}" />
                                                     </StackPanel>
                                                 </DataTemplate>
@@ -547,8 +542,8 @@
                                         Grid.Row="1"
                                         Margin="0,0,0,12"
                                         Padding="14"
-                                        Background="{StaticResource BrushCardBackgroundSoft}"
-                                        BorderBrush="{StaticResource BrushBorderSoft}"
+                                        Background="{ThemeResource BrushCardBackgroundSoft}"
+                                        BorderBrush="{ThemeResource BrushBorderSoft}"
                                         BorderThickness="1"
                                         CornerRadius="14">
                                         <Grid>
@@ -561,7 +556,7 @@
                                             <TextBlock
                                                 VerticalAlignment="Center"
                                                 FontSize="14"
-                                                Foreground="{StaticResource BrushTextPrimary}"
+                                                Foreground="{ThemeResource BrushTextPrimary}"
                                                 Text="アプリ" />
                                             <ComboBox
                                                 x:Name="AppComboBox"
@@ -585,8 +580,8 @@
                                         <Border
                                             Margin="0,0,0,12"
                                             Padding="14"
-                                            Background="{StaticResource BrushCardBackgroundSoft}"
-                                            BorderBrush="{StaticResource BrushBorderSoft}"
+                                            Background="{ThemeResource BrushCardBackgroundSoft}"
+                                            BorderBrush="{ThemeResource BrushBorderSoft}"
                                             BorderThickness="1"
                                             CornerRadius="14">
                                             <Grid>
@@ -599,7 +594,7 @@
                                                     x:Name="AppHeaderLabelTextBlock"
                                                     VerticalAlignment="Center"
                                                     FontSize="12"
-                                                    Foreground="{StaticResource BrushTextSecondary}"
+                                                    Foreground="{ThemeResource BrushTextSecondary}"
                                                     Text="App" />
                                                 <Grid Grid.Column="1">
                                                     <Grid.ColumnDefinitions>
@@ -614,42 +609,42 @@
                                                         Grid.Column="0"
                                                         HorizontalAlignment="Left"
                                                         FontSize="12"
-                                                        Foreground="{StaticResource BrushTextSecondary}"
+                                                        Foreground="{ThemeResource BrushTextSecondary}"
                                                         Text="00:00" />
                                                     <TextBlock
                                                         x:Name="AppTick06TextBlock"
                                                         Grid.Column="1"
                                                         HorizontalAlignment="Center"
                                                         FontSize="12"
-                                                        Foreground="{StaticResource BrushTextSecondary}"
+                                                        Foreground="{ThemeResource BrushTextSecondary}"
                                                         Text="06:00" />
                                                     <TextBlock
                                                         x:Name="AppTick12TextBlock"
                                                         Grid.Column="2"
                                                         HorizontalAlignment="Center"
                                                         FontSize="12"
-                                                        Foreground="{StaticResource BrushTextSecondary}"
+                                                        Foreground="{ThemeResource BrushTextSecondary}"
                                                         Text="12:00" />
                                                     <TextBlock
                                                         x:Name="AppTick18TextBlock"
                                                         Grid.Column="3"
                                                         HorizontalAlignment="Center"
                                                         FontSize="12"
-                                                        Foreground="{StaticResource BrushTextSecondary}"
+                                                        Foreground="{ThemeResource BrushTextSecondary}"
                                                         Text="18:00" />
                                                     <TextBlock
                                                         x:Name="AppTick24TextBlock"
                                                         Grid.Column="4"
                                                         HorizontalAlignment="Right"
                                                         FontSize="12"
-                                                        Foreground="{StaticResource BrushTextSecondary}"
+                                                        Foreground="{ThemeResource BrushTextSecondary}"
                                                         Text="24:00" />
                                                 </Grid>
                                                 <TextBlock
                                                     Grid.Column="2"
                                                     HorizontalAlignment="Right"
                                                     FontSize="12"
-                                                    Foreground="{StaticResource BrushTextSecondary}"
+                                                    Foreground="{ThemeResource BrushTextSecondary}"
                                                     Text="Total" />
                                             </Grid>
                                         </Border>
@@ -665,8 +660,8 @@
                                                     <Border
                                                         Margin="0,0,0,12"
                                                         Padding="14"
-                                                        Background="{StaticResource BrushCardBackgroundSoft}"
-                                                        BorderBrush="{StaticResource BrushBorderSoft}"
+                                                        Background="{ThemeResource BrushCardBackgroundSoft}"
+                                                        BorderBrush="{ThemeResource BrushBorderSoft}"
                                                         BorderThickness="1"
                                                         CornerRadius="14"
                                                         PointerEntered="OnCardPointerEntered"
@@ -682,17 +677,17 @@
                                                             <TextBlock
                                                                 VerticalAlignment="Center"
                                                                 FontSize="14"
-                                                                Foreground="{StaticResource BrushTextPrimary}"
+                                                                Foreground="{ThemeResource BrushTextPrimary}"
                                                                 Text="{x:Bind Label}" />
 
                                                             <Border
                                                                 Grid.Column="1"
                                                                 Height="50"
-                                                                Background="{StaticResource BrushRail}"
+                                                                Background="{ThemeResource BrushRail}"
                                                                 CornerRadius="{StaticResource RadiusPill}">
                                                                 <Viewbox Stretch="Fill" StretchDirection="Both">
                                                                     <Grid Width="960" Height="50">
-                                                                        <ItemsControl ItemsSource="{x:Bind Segments}">
+                                                                        <ItemsControl ItemsSource="{x:Bind Segments}" UseLayoutRounding="False">
                                                                             <ItemsControl.ItemsPanel>
                                                                                 <ItemsPanelTemplate>
                                                                                     <StackPanel Orientation="Horizontal" />
@@ -721,7 +716,7 @@
                                                                 VerticalAlignment="Center"
                                                                 HorizontalAlignment="Right"
                                                                 FontSize="14"
-                                                                Foreground="{StaticResource BrushTextPrimary}"
+                                                                Foreground="{ThemeResource BrushTextPrimary}"
                                                                 Text="{x:Bind TotalLabel}" />
                                                         </Grid>
                                                     </Border>
@@ -735,8 +730,8 @@
                                         Grid.Row="5"
                                         Margin="0,0,0,12"
                                         Padding="14"
-                                        Background="{StaticResource BrushCardBackgroundSoft}"
-                                        BorderBrush="{StaticResource BrushBorderSoft}"
+                                        Background="{ThemeResource BrushCardBackgroundSoft}"
+                                        BorderBrush="{ThemeResource BrushBorderSoft}"
                                         BorderThickness="1"
                                         CornerRadius="14"
                                         Visibility="Collapsed">
@@ -749,7 +744,7 @@
                                             <TextBlock
                                                 VerticalAlignment="Center"
                                                 FontSize="12"
-                                                Foreground="{StaticResource BrushTextSecondary}"
+                                                Foreground="{ThemeResource BrushTextSecondary}"
                                                 Text="Date" />
                                             <Grid Grid.Column="1">
                                                 <Grid.ColumnDefinitions>
@@ -764,35 +759,35 @@
                                                     Grid.Column="0"
                                                     HorizontalAlignment="Left"
                                                     FontSize="12"
-                                                    Foreground="{StaticResource BrushTextSecondary}"
+                                                    Foreground="{ThemeResource BrushTextSecondary}"
                                                     Text="00:00" />
                                                 <TextBlock
                                                     x:Name="AppWeekTick06TextBlock"
                                                     Grid.Column="1"
                                                     HorizontalAlignment="Center"
                                                     FontSize="12"
-                                                    Foreground="{StaticResource BrushTextSecondary}"
+                                                    Foreground="{ThemeResource BrushTextSecondary}"
                                                     Text="06:00" />
                                                 <TextBlock
                                                     x:Name="AppWeekTick12TextBlock"
                                                     Grid.Column="2"
                                                     HorizontalAlignment="Center"
                                                     FontSize="12"
-                                                    Foreground="{StaticResource BrushTextSecondary}"
+                                                    Foreground="{ThemeResource BrushTextSecondary}"
                                                     Text="12:00" />
                                                 <TextBlock
                                                     x:Name="AppWeekTick18TextBlock"
                                                     Grid.Column="3"
                                                     HorizontalAlignment="Center"
                                                     FontSize="12"
-                                                    Foreground="{StaticResource BrushTextSecondary}"
+                                                    Foreground="{ThemeResource BrushTextSecondary}"
                                                     Text="18:00" />
                                                 <TextBlock
                                                     x:Name="AppWeekTick24TextBlock"
                                                     Grid.Column="4"
                                                     HorizontalAlignment="Right"
                                                     FontSize="12"
-                                                    Foreground="{StaticResource BrushTextSecondary}"
+                                                    Foreground="{ThemeResource BrushTextSecondary}"
                                                     Text="24:00" />
                                             </Grid>
                                             <TextBlock
@@ -800,7 +795,7 @@
                                                 HorizontalAlignment="Right"
                                                 VerticalAlignment="Center"
                                                 FontSize="12"
-                                                Foreground="{StaticResource BrushTextSecondary}"
+                                                Foreground="{ThemeResource BrushTextSecondary}"
                                                 Text="Total" />
                                         </Grid>
                                     </Border>
@@ -816,8 +811,8 @@
                                                 <Border
                                                     Margin="0,0,0,12"
                                                     Padding="14"
-                                                    Background="{StaticResource BrushCardBackgroundSoft}"
-                                                    BorderBrush="{StaticResource BrushBorderSoft}"
+                                                    Background="{ThemeResource BrushCardBackgroundSoft}"
+                                                    BorderBrush="{ThemeResource BrushBorderSoft}"
                                                     BorderThickness="1"
                                                     CornerRadius="14"
                                                     PointerEntered="OnCardPointerEntered"
@@ -833,17 +828,17 @@
                                                         <TextBlock
                                                             VerticalAlignment="Center"
                                                             FontSize="14"
-                                                            Foreground="{StaticResource BrushTextPrimary}"
+                                                            Foreground="{ThemeResource BrushTextPrimary}"
                                                             Text="{x:Bind BucketLabel}" />
 
                                                         <Border
                                                             Grid.Column="1"
                                                             Height="50"
-                                                            Background="{StaticResource BrushRail}"
+                                                            Background="{ThemeResource BrushRail}"
                                                             CornerRadius="{StaticResource RadiusPill}">
                                                             <Viewbox Stretch="Fill" StretchDirection="Both">
                                                                 <Grid Width="760" Height="50">
-                                                                    <ItemsControl ItemsSource="{x:Bind Segments}">
+                                                                    <ItemsControl ItemsSource="{x:Bind Segments}" UseLayoutRounding="False">
                                                                         <ItemsControl.ItemsPanel>
                                                                             <ItemsPanelTemplate>
                                                                                 <StackPanel Orientation="Horizontal" />
@@ -872,7 +867,7 @@
                                                             VerticalAlignment="Center"
                                                             HorizontalAlignment="Right"
                                                             FontSize="14"
-                                                            Foreground="{StaticResource BrushTextPrimary}"
+                                                            Foreground="{ThemeResource BrushTextPrimary}"
                                                             Text="{x:Bind TotalLabel}" />
                                                     </Grid>
                                                 </Border>

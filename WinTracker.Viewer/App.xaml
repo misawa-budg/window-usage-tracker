@@ -3,38 +3,63 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
-        <Color x:Key="ColorPageBackground">#FFF6F7FB</Color>
-        <Color x:Key="ColorCardBackground">#FFFFFFFF</Color>
-        <Color x:Key="ColorCardBackgroundSoft">#FFFDFDFF</Color>
-        <Color x:Key="ColorCardShadow">#140E1A2A</Color>
-        <Color x:Key="ColorBorderSoft">#FFE9ECF5</Color>
-        <Color x:Key="ColorRail">#FFF4F6FB</Color>
-        <Color x:Key="ColorTextPrimary">#FF2E3141</Color>
-        <Color x:Key="ColorTextSecondary">#FF7D8398</Color>
-        <Color x:Key="ColorStateActive">#FFBFA8FF</Color>
-        <Color x:Key="ColorStateOpen">#FFB8E9C7</Color>
-        <Color x:Key="ColorStateMinimized">#FFF9E6A6</Color>
-        <Color x:Key="ColorPastelRed">#FFF8B5B5</Color>
-        <SolidColorBrush x:Key="BrushPageBackground" Color="{StaticResource ColorPageBackground}" />
-        <SolidColorBrush x:Key="BrushCardBackground" Color="{StaticResource ColorCardBackground}" />
-        <SolidColorBrush x:Key="BrushCardBackgroundSoft" Color="{StaticResource ColorCardBackgroundSoft}" />
-        <SolidColorBrush x:Key="BrushCardShadow" Color="{StaticResource ColorCardShadow}" />
-        <SolidColorBrush x:Key="BrushBorderSoft" Color="{StaticResource ColorBorderSoft}" />
-        <SolidColorBrush x:Key="BrushRail" Color="{StaticResource ColorRail}" />
-        <SolidColorBrush x:Key="BrushTextPrimary" Color="{StaticResource ColorTextPrimary}" />
-        <SolidColorBrush x:Key="BrushTextSecondary" Color="{StaticResource ColorTextSecondary}" />
-        <SolidColorBrush x:Key="BrushStateActive" Color="{StaticResource ColorStateActive}" />
-        <SolidColorBrush x:Key="BrushStateOpen" Color="{StaticResource ColorStateOpen}" />
-        <SolidColorBrush x:Key="BrushStateMinimized" Color="{StaticResource ColorStateMinimized}" />
-        <SolidColorBrush x:Key="BrushPastelRed" Color="{StaticResource ColorPastelRed}" />
-        <CornerRadius x:Key="RadiusCard">18</CornerRadius>
-        <CornerRadius x:Key="RadiusLarge">20</CornerRadius>
-        <CornerRadius x:Key="RadiusPill">0</CornerRadius>
-        <CornerRadius x:Key="RadiusSegment">0</CornerRadius>
-        <Thickness x:Key="SpaceXS">6</Thickness>
-        <Thickness x:Key="SpaceSM">10</Thickness>
-        <Thickness x:Key="SpaceMD">14</Thickness>
-        <Thickness x:Key="SpaceLG">20</Thickness>
-        <Thickness x:Key="SpaceXL">28</Thickness>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <Color x:Key="ColorPageBackground">#FFF3F3F3</Color>
+                    <Color x:Key="ColorCardBackground">#FFFFFFFF</Color>
+                    <Color x:Key="ColorCardBackgroundSoft">#FFFDFDFF</Color>
+                    <Color x:Key="ColorCardShadow">#140E1A2A</Color>
+                    <Color x:Key="ColorBorderSoft">#FFE9ECF5</Color>
+                    <Color x:Key="ColorRail">#FFF4F6FB</Color>
+                    <Color x:Key="ColorTextPrimary">#FF2E3141</Color>
+                    <Color x:Key="ColorTextSecondary">#FF7D8398</Color>
+
+                    <Color x:Key="ColorStateActive">#FF005FB8</Color>
+                    <Color x:Key="ColorStateOpen">#FF315482</Color>
+                    <Color x:Key="ColorStateMinimized">#FF7DA1CD</Color>
+                    <Color x:Key="ColorPastelRed">#FFC42B1C</Color>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <Color x:Key="ColorPageBackground">#FF202020</Color>
+                    <Color x:Key="ColorCardBackground">#FF2D2D2D</Color>
+                    <Color x:Key="ColorCardBackgroundSoft">#FF323232</Color>
+                    <Color x:Key="ColorCardShadow">#33000000</Color>
+                    <Color x:Key="ColorBorderSoft">#FF434343</Color>
+                    <Color x:Key="ColorRail">#FF1F1F1F</Color>
+                    <Color x:Key="ColorTextPrimary">#FFFFFFFF</Color>
+                    <Color x:Key="ColorTextSecondary">#FFA0A0A0</Color>
+
+                    <Color x:Key="ColorStateActive">#FF60CDFF</Color>
+                    <Color x:Key="ColorStateOpen">#FF3E6C99</Color>
+                    <Color x:Key="ColorStateMinimized">#FF244A6F</Color>
+                    <Color x:Key="ColorPastelRed">#FFFF99A4</Color>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <SolidColorBrush x:Key="BrushPageBackground" Color="{ThemeResource ColorPageBackground}" />
+            <SolidColorBrush x:Key="BrushCardBackground" Color="{ThemeResource ColorCardBackground}" />
+            <SolidColorBrush x:Key="BrushCardBackgroundSoft" Color="{ThemeResource ColorCardBackgroundSoft}" />
+            <SolidColorBrush x:Key="BrushCardShadow" Color="{ThemeResource ColorCardShadow}" />
+            <SolidColorBrush x:Key="BrushBorderSoft" Color="{ThemeResource ColorBorderSoft}" />
+            <SolidColorBrush x:Key="BrushRail" Color="{ThemeResource ColorRail}" />
+            <SolidColorBrush x:Key="BrushTextPrimary" Color="{ThemeResource ColorTextPrimary}" />
+            <SolidColorBrush x:Key="BrushTextSecondary" Color="{ThemeResource ColorTextSecondary}" />
+            <SolidColorBrush x:Key="BrushStateActive" Color="{ThemeResource ColorStateActive}" />
+            <SolidColorBrush x:Key="BrushStateOpen" Color="{ThemeResource ColorStateOpen}" />
+            <SolidColorBrush x:Key="BrushStateMinimized" Color="{ThemeResource ColorStateMinimized}" />
+            <SolidColorBrush x:Key="BrushPastelRed" Color="{ThemeResource ColorPastelRed}" />
+
+            <CornerRadius x:Key="RadiusCard">8</CornerRadius>
+            <CornerRadius x:Key="RadiusLarge">12</CornerRadius>
+            <CornerRadius x:Key="RadiusPill">4</CornerRadius>
+            <CornerRadius x:Key="RadiusSegment">0</CornerRadius>
+
+            <Thickness x:Key="SpaceXS">4</Thickness>
+            <Thickness x:Key="SpaceSM">8</Thickness>
+            <Thickness x:Key="SpaceMD">12</Thickness>
+            <Thickness x:Key="SpaceLG">16</Thickness>
+            <Thickness x:Key="SpaceXL">24</Thickness>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

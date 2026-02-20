@@ -24,9 +24,6 @@ public sealed partial class MainWindow : Window
     private const int CompactTickSwitchWidth = 1360;
     private const double TickOffsetBase = 100.0;
     private const double TickOffsetMax = 100.0;
-    private static readonly SolidColorBrush RefreshButtonNormalBrush = CreateBrush("#FFFFFF");
-    private static readonly SolidColorBrush RefreshButtonHoverBrush = CreateBrush("#EFEFEF");
-    private static readonly SolidColorBrush RefreshButtonPressedBrush = CreateBrush("#E0E0E0");
     private static readonly SolidColorBrush TransparentBrush =
         new(Windows.UI.Color.FromArgb(0, 0, 0, 0));
 
@@ -48,6 +45,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        SystemBackdrop = new MicaBackdrop();
         ConfigureWindowSizing();
         UpdateTimeTickLabels();
 
@@ -271,7 +269,7 @@ public sealed partial class MainWindow : Window
         return new UsageQueryWindow(
             fromLocal.ToUniversalTime(),
             toLocal.ToUniversalTime(),
-            TimeSpan.FromHours(1));
+            TimeSpan.FromMinutes(DailyBucketMinutes));
     }
 
     private static string ResolveDatabasePath()
@@ -456,17 +454,36 @@ public sealed partial class MainWindow : Window
         return new AbsoluteSegmentViewModel(segment.Width, fill, segment.Tooltip);
     }
 
-    private static SolidColorBrush CreateBrush(string hex)
+    private static SolidColorBrush CreateBrush(string hexOrKey)
     {
-        if (hex.Length != 7 || !hex.StartsWith("#", StringComparison.Ordinal))
+        if (Application.Current.Resources.TryGetValue(hexOrKey, out object resource))
+        {
+            if (resource is SolidColorBrush brush)
+            {
+                return brush;
+            }
+            if (resource is Windows.UI.Color color)
+            {
+                return new SolidColorBrush(color);
+            }
+        }
+
+        if (hexOrKey.Length != 7 || !hexOrKey.StartsWith("#", StringComparison.Ordinal))
         {
             return new SolidColorBrush(Colors.Gray);
         }
 
-        byte r = Convert.ToByte(hex.Substring(1, 2), 16);
-        byte g = Convert.ToByte(hex.Substring(3, 2), 16);
-        byte b = Convert.ToByte(hex.Substring(5, 2), 16);
-        return new SolidColorBrush(Windows.UI.Color.FromArgb(255, r, g, b));
+        try
+        {
+            byte r = Convert.ToByte(hexOrKey.Substring(1, 2), 16);
+            byte g = Convert.ToByte(hexOrKey.Substring(3, 2), 16);
+            byte b = Convert.ToByte(hexOrKey.Substring(5, 2), 16);
+            return new SolidColorBrush(Windows.UI.Color.FromArgb(255, r, g, b));
+        }
+        catch
+        {
+            return new SolidColorBrush(Colors.Gray);
+        }
     }
 
     private void ClearRows()
@@ -486,41 +503,10 @@ public sealed partial class MainWindow : Window
         RefreshButton.IsEnabled = !busy;
         RangeComboBox.IsEnabled = !busy;
         AppComboBox.IsEnabled = !busy;
-        RefreshButton.Background = RefreshButtonNormalBrush;
         StatusTextBlock.Text = status;
     }
 
-    private void OnRefreshButtonPointerEntered(object sender, PointerRoutedEventArgs e)
-    {
-        if (sender is Button button)
-        {
-            button.Background = RefreshButtonHoverBrush;
-        }
-    }
 
-    private void OnRefreshButtonPointerExited(object sender, PointerRoutedEventArgs e)
-    {
-        if (sender is Button button)
-        {
-            button.Background = RefreshButtonNormalBrush;
-        }
-    }
-
-    private void OnRefreshButtonPointerPressed(object sender, PointerRoutedEventArgs e)
-    {
-        if (sender is Button button)
-        {
-            button.Background = RefreshButtonPressedBrush;
-        }
-    }
-
-    private void OnRefreshButtonPointerReleased(object sender, PointerRoutedEventArgs e)
-    {
-        if (sender is Button button)
-        {
-            button.Background = RefreshButtonHoverBrush;
-        }
-    }
 
     private void OnCardPointerEntered(object sender, PointerRoutedEventArgs e) =>
         AnimateInteractive(sender as FrameworkElement, scale: 1.02, opacity: 1.0, durationMs: 140);
