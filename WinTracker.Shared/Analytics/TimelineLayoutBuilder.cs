@@ -64,6 +64,36 @@ public sealed class TimelineLayoutBuilder
         return legend;
     }
 
+    public IReadOnlyList<LegendItemLayout> BuildOverviewLegend(IReadOnlyList<ActiveIntervalRow> activeIntervals)
+    {
+        HashSet<string> visibleApps = BuildVisibleAppSet(activeIntervals, MinVisibleSeconds);
+        var apps = activeIntervals
+            .Where(x => visibleApps.Contains(x.ExeName))
+            .GroupBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new
+            {
+                ExeName = g.Key,
+                Seconds = g.Sum(v => (v.StateEndUtc - v.StateStartUtc).TotalSeconds)
+            })
+            .Where(x => x.Seconds > 0)
+            .OrderByDescending(x => x.Seconds)
+            .ThenBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var legend = new List<LegendItemLayout>();
+        foreach (var app in apps.Take(_topAppCount))
+        {
+            legend.Add(new LegendItemLayout(app.ExeName, ColorForKey(app.ExeName)));
+        }
+
+        if (apps.Count > _topAppCount)
+        {
+            legend.Add(new LegendItemLayout(OtherLabel, OtherColorKey));
+        }
+
+        return legend;
+    }
+
     public IReadOnlyList<LegendItemLayout> BuildAppLegend()
     {
         return
@@ -452,6 +482,130 @@ public sealed class TimelineLayoutBuilder
         return rows;
     }
 
+    public IReadOnlyList<StateStackRowLayout> BuildDailyStateStackRowsFromIntervals(
+        IReadOnlyList<ActiveIntervalRow> activeIntervals,
+        UsageQueryWindow window,
+        double trackWidth)
+    {
+        double windowSeconds = (window.ToUtc - window.FromUtc).TotalSeconds;
+        if (windowSeconds <= 0)
+        {
+            return
+            [
+                new StateStackRowLayout(
+                    OverviewState,
+                    "00:00",
+                    [new StackedColumnLayout(trackWidth, true, [])])
+            ];
+        }
+
+        List<ActiveIntervalRow> clipped = activeIntervals
+            .Where(x => x.StateEndUtc > window.FromUtc && x.StateStartUtc < window.ToUtc)
+            .Select(x =>
+            {
+                DateTimeOffset startUtc = x.StateStartUtc < window.FromUtc ? window.FromUtc : x.StateStartUtc;
+                DateTimeOffset endUtc = x.StateEndUtc > window.ToUtc ? window.ToUtc : x.StateEndUtc;
+                return new ActiveIntervalRow(x.ExeName, startUtc, endUtc);
+            })
+            .Where(x => x.StateEndUtc > x.StateStartUtc)
+            .ToList();
+
+        HashSet<string> visibleApps = BuildVisibleAppSet(clipped, MinVisibleSeconds);
+        List<ActiveIntervalRow> visibleIntervals = clipped
+            .Where(x => visibleApps.Contains(x.ExeName))
+            .ToList();
+
+        var boundaries = new List<DateTimeOffset>(visibleIntervals.Count * 2 + 2)
+        {
+            window.FromUtc,
+            window.ToUtc
+        };
+
+        boundaries.AddRange(visibleIntervals.Select(x => x.StateStartUtc));
+        boundaries.AddRange(visibleIntervals.Select(x => x.StateEndUtc));
+
+        List<DateTimeOffset> orderedBoundaries = boundaries
+            .Distinct()
+            .OrderBy(x => x)
+            .ToList();
+
+        var accumulator = new StateStackAccumulator(OverviewState);
+        double totalSeconds = 0;
+
+        for (int index = 0; index < orderedBoundaries.Count - 1; index++)
+        {
+            DateTimeOffset sliceStartUtc = orderedBoundaries[index];
+            DateTimeOffset sliceEndUtc = orderedBoundaries[index + 1];
+            if (sliceEndUtc <= sliceStartUtc)
+            {
+                continue;
+            }
+
+            double sliceSeconds = (sliceEndUtc - sliceStartUtc).TotalSeconds;
+            double sliceWidth = trackWidth * (sliceSeconds / windowSeconds);
+
+            List<ActiveIntervalRow> candidates = visibleIntervals
+                .Where(x => x.StateStartUtc < sliceEndUtc && x.StateEndUtc > sliceStartUtc)
+                .ToList();
+
+            if (candidates.Count == 0)
+            {
+                accumulator.AddNoData(sliceWidth);
+                continue;
+            }
+
+            ActiveIntervalRow topInterval = candidates
+                .OrderByDescending(x => x.StateStartUtc)
+                .ThenBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
+                .First();
+
+            totalSeconds += sliceSeconds;
+            accumulator.AddData(
+                sliceWidth,
+                [new AppUsage(topInterval.ExeName, sliceSeconds, ColorForKey(topInterval.ExeName))],
+                sliceStartUtc.ToLocalTime(),
+                sliceEndUtc.ToLocalTime());
+        }
+
+        return
+        [
+            new StateStackRowLayout(
+                OverviewState,
+                ToDuration(totalSeconds),
+                accumulator.Build())
+        ];
+    }
+
+    public IReadOnlyList<StateStackRowLayout> BuildWeeklyStateStackRowsFromIntervals(
+        IReadOnlyList<ActiveIntervalRow> activeIntervals,
+        UsageQueryWindow window,
+        double trackWidth)
+    {
+        var rows = new List<StateStackRowLayout>();
+
+        foreach (DateTimeOffset dayStart in EnumerateDayBuckets(window))
+        {
+            DateTimeOffset dayEnd = dayStart.AddDays(1);
+            if (dayEnd > window.ToUtc)
+            {
+                dayEnd = window.ToUtc;
+            }
+
+            UsageQueryWindow dayWindow = new(dayStart, dayEnd, window.BucketSize);
+            List<ActiveIntervalRow> dayIntervals = activeIntervals
+                .Where(x => x.StateEndUtc > dayStart && x.StateStartUtc < dayEnd)
+                .ToList();
+
+            StateStackRowLayout active = BuildDailyStateStackRowsFromIntervals(dayIntervals, dayWindow, trackWidth)[0];
+            rows.Add(new StateStackRowLayout(
+                $"{dayStart.ToLocalTime():MM/dd (ddd)}",
+                active.TotalLabel,
+                active.Columns));
+        }
+
+        return rows;
+    }
+
     public IReadOnlyList<StateStackRowLayout> BuildDailyStateStackRows(
         IReadOnlyList<TimelineUsageRow> timelineRows,
         UsageQueryWindow window,
@@ -500,15 +654,21 @@ public sealed class TimelineLayoutBuilder
                 continue;
             }
 
-            double occupiedSeconds = Math.Min((double)window.BucketSeconds, apps.Sum(x => x.Seconds));
-            totalSeconds += occupiedSeconds;
-
             AppUsage topApp = apps.OrderByDescending(x => x.Seconds).First();
+            double displayedSeconds = Math.Min((double)window.BucketSeconds, topApp.Seconds);
+            totalSeconds += displayedSeconds;
+
+            if (displayedSeconds <= 0)
+            {
+                accumulator.AddNoData(bucketWidth);
+                continue;
+            }
+
             var displayApps = new List<AppUsage>
             {
-                new AppUsage(topApp.ExeName, occupiedSeconds, topApp.ColorHex)
+                new AppUsage(topApp.ExeName, displayedSeconds, topApp.ColorHex)
             };
-            double width = bucketWidth * (occupiedSeconds / window.BucketSeconds);
+            double width = bucketWidth * (displayedSeconds / window.BucketSeconds);
 
             accumulator.AddData(
                 width,
@@ -926,6 +1086,15 @@ public sealed class TimelineLayoutBuilder
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
+    private static HashSet<string> BuildVisibleAppSet(IReadOnlyList<ActiveIntervalRow> activeIntervals, double minVisibleSeconds)
+    {
+        return activeIntervals
+            .GroupBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Sum(v => (v.StateEndUtc - v.StateStartUtc).TotalSeconds) >= minVisibleSeconds)
+            .Select(g => g.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
     private static void AddNoDataSegment(ICollection<SegmentLayout> segments, double width)
     {
         segments.Add(new SegmentLayout(
@@ -1065,7 +1234,7 @@ public sealed class TimelineLayoutBuilder
                     continue;
                 }
 
-                string tooltip = $"{segment.TooltipPrefix} | {FormatTooltipTimeRange(segment.LocalStart, segment.LocalEnd)} | {ToDuration(segment.Seconds)}";
+                string tooltip = $"{segment.TooltipPrefix} | {FormatTooltipTimeRange(segment.LocalStart, segment.LocalEnd)} | {ToDurationWithSeconds(segment.Seconds)}";
                 result.Add(new SegmentLayout(
                     segment.Width,
                     tooltip,
@@ -1217,7 +1386,7 @@ public sealed class TimelineLayoutBuilder
                 foreach (string app in column.AppOrder)
                 {
                     double seconds = column.SecondsByApp.GetValueOrDefault(app, 0);
-                    string tooltip = $"{_state} | {app} | {FormatTooltipTimeRange(column.LocalStart, column.LocalEnd)} | {ToDuration(seconds)}";
+                    string tooltip = $"{_state} | {app} | {FormatTooltipTimeRange(column.LocalStart, column.LocalEnd)} | {ToDurationWithSeconds(seconds)}";
                     entries.Add(new StackedEntryLayout(
                         app,
                         column.ColorByApp.GetValueOrDefault(app, OtherColorKey),
@@ -1310,12 +1479,19 @@ public sealed class TimelineLayoutBuilder
 
     private static string FormatTooltipTimeRange(DateTimeOffset start, DateTimeOffset end)
     {
-        string endStr = end.ToString("HH:mm");
+        string startStr = start.ToString("HH:mm:ss");
+        string endStr = end.ToString("HH:mm:ss");
         if (end > start && end.TimeOfDay.Ticks == 0)
         {
-            endStr = "24:00";
+            endStr = "24:00:00";
         }
-        return $"{start:HH:mm}-{endStr}";
+        return $"{startStr}-{endStr}";
+    }
+
+    private static string ToDurationWithSeconds(double seconds)
+    {
+        TimeSpan span = TimeSpan.FromSeconds(Math.Max(0, Math.Round(seconds)));
+        return $"{(int)span.TotalHours:D2}:{span.Minutes:D2}:{span.Seconds:D2}";
     }
 
     private static uint ComputeStableHash(string key)

@@ -17,3 +17,8 @@ public readonly record struct TimelineUsageRow(
     string ExeName,
     string State,
     double Seconds);
+
+public readonly record struct ActiveIntervalRow(
+    string ExeName,
+    DateTimeOffset StateStartUtc,
+    DateTimeOffset StateEndUtc);

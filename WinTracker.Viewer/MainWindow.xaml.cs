@@ -37,6 +37,7 @@ public sealed partial class MainWindow : Window
     private readonly TimelineLayoutBuilder _layoutBuilder = new(topAppCount: TopAppCount);
 
     private IReadOnlyList<TimelineUsageRow> _timelineRows = [];
+    private IReadOnlyList<ActiveIntervalRow> _activeIntervals = [];
     private UsageQueryWindow _currentWindow = CreateLocalDay24hWindow();
     private CancellationTokenSource? _reloadCts;
     private bool _isInitialized;
@@ -177,10 +178,12 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
-            _timelineRows = await Task.Run(() =>
+            (_timelineRows, _activeIntervals) = await Task.Run(() =>
             {
                 using var query = new SqliteTimelineQueryService(dbPath);
-                return query.QueryTimeline(_currentWindow);
+                return (
+                    query.QueryTimeline(_currentWindow),
+                    query.QueryActiveIntervals(_currentWindow));
             }, token);
 
             if (GetRangeLabel() == "24h")
@@ -282,8 +285,8 @@ public sealed partial class MainWindow : Window
 
     private void BuildDailyOverviewRows()
     {
-        IReadOnlyList<StateStackRowLayout> rows = _layoutBuilder.BuildDailyStateStackRows(
-            _timelineRows,
+        IReadOnlyList<StateStackRowLayout> rows = _layoutBuilder.BuildDailyStateStackRowsFromIntervals(
+            _activeIntervals,
             _currentWindow,
             DailyTrackWidth);
 
@@ -292,8 +295,8 @@ public sealed partial class MainWindow : Window
 
     private void BuildWeeklyOverviewRows()
     {
-        IReadOnlyList<StateStackRowLayout> rows = _layoutBuilder.BuildWeeklyStateStackRows(
-            _timelineRows,
+        IReadOnlyList<StateStackRowLayout> rows = _layoutBuilder.BuildWeeklyStateStackRowsFromIntervals(
+            _activeIntervals,
             _currentWindow,
             DailyTrackWidth);
 
@@ -362,7 +365,7 @@ public sealed partial class MainWindow : Window
     private void RebuildOverviewLegend()
     {
         _overviewLegendItems.Clear();
-        IReadOnlyList<LegendItemLayout> legendItems = _layoutBuilder.BuildOverviewLegend(_timelineRows);
+        IReadOnlyList<LegendItemLayout> legendItems = _layoutBuilder.BuildOverviewLegend(_activeIntervals);
         foreach (LegendItemLayout item in legendItems)
         {
             _overviewLegendItems.Add(new LegendItemViewModel(
@@ -488,6 +491,8 @@ public sealed partial class MainWindow : Window
 
     private void ClearRows()
     {
+        _timelineRows = [];
+        _activeIntervals = [];
         _overviewRows.Clear();
         _overviewDailyRows.Clear();
         _appDailyLanes.Clear();

@@ -134,6 +134,97 @@ public sealed class TimelineLayoutBuilderTests
     }
 
     [Fact]
+    public void BuildDailyStateStackRows_UsesTopAppSecondsForDisplayedWidth()
+    {
+        var builder = new TimelineLayoutBuilder();
+        UsageQueryWindow window = new(
+            Utc(2026, 2, 19, 0, 0, 0),
+            Utc(2026, 2, 19, 1, 0, 0),
+            TimeSpan.FromMinutes(5));
+
+        // appA/appB both exceed visible threshold (>=300s) in this window.
+        IReadOnlyList<TimelineUsageRow> rows =
+        [
+            // 00:00-00:05
+            new(Utc(2026, 2, 19, 0, 0, 0), "appA.exe", "Active", 300),
+            // 00:20-00:25 (target bucket): top app is appB(240s), appA has 60s
+            new(Utc(2026, 2, 19, 0, 20, 0), "appA.exe", "Active", 60),
+            new(Utc(2026, 2, 19, 0, 20, 0), "appB.exe", "Active", 240),
+            // 00:40-00:45
+            new(Utc(2026, 2, 19, 0, 40, 0), "appB.exe", "Active", 300)
+        ];
+
+        IReadOnlyList<StateStackRowLayout> result = builder.BuildDailyStateStackRows(rows, window, trackWidth: 120);
+        StateStackRowLayout active = Assert.Single(result);
+
+        StackedColumnLayout target = Assert.Single(
+            active.Columns,
+            x => !x.IsNoData &&
+                 x.Entries.Any(e => string.Equals(e.Label, "appB.exe", StringComparison.OrdinalIgnoreCase)) &&
+                 Math.Abs(x.Width - 8) < 0.001);
+
+        // 1h / 5m = 12 buckets => bucketWidth = 10.
+        // top app seconds = 240/300 => expected width = 8.
+        AssertApproximately(target.Width, 8);
+        StackedEntryLayout entry = Assert.Single(target.Entries);
+        Assert.Equal("appB.exe", entry.Label);
+        Assert.Contains("00:04", entry.Tooltip);
+    }
+
+    [Fact]
+    public void BuildDailyStateStackRowsFromIntervals_UsesContinuousIntervals()
+    {
+        var builder = new TimelineLayoutBuilder();
+        UsageQueryWindow window = new(
+            Utc(2026, 2, 19, 0, 0, 0),
+            Utc(2026, 2, 19, 1, 0, 0),
+            TimeSpan.FromMinutes(5));
+
+        IReadOnlyList<ActiveIntervalRow> intervals =
+        [
+            new("appA.exe", Utc(2026, 2, 19, 0, 0, 0), Utc(2026, 2, 19, 0, 3, 0)),
+            new("appA.exe", Utc(2026, 2, 19, 0, 30, 0), Utc(2026, 2, 19, 0, 33, 0)),
+            new("appB.exe", Utc(2026, 2, 19, 0, 20, 0), Utc(2026, 2, 19, 0, 24, 0)),
+            new("appB.exe", Utc(2026, 2, 19, 0, 50, 0), Utc(2026, 2, 19, 0, 53, 0))
+        ];
+
+        IReadOnlyList<StateStackRowLayout> result = builder.BuildDailyStateStackRowsFromIntervals(intervals, window, trackWidth: 120);
+        StateStackRowLayout active = Assert.Single(result);
+
+        // appA/appB are both >=300s and visible. A 4-minute segment should be width 8 on 120px/1h.
+        StackedColumnLayout appBSegment = Assert.Single(
+            active.Columns,
+            x => !x.IsNoData &&
+                 Math.Abs(x.Width - 8) < 0.001 &&
+                 x.Entries.Any(e => e.Label == "appB.exe"));
+
+        Assert.Single(appBSegment.Entries);
+        Assert.Equal("appB.exe", appBSegment.Entries[0].Label);
+    }
+
+    [Fact]
+    public void BuildDailyStateStackRowsFromIntervals_TooltipIncludesSeconds()
+    {
+        var builder = new TimelineLayoutBuilder();
+        UsageQueryWindow window = new(
+            Utc(2026, 2, 19, 0, 0, 0),
+            Utc(2026, 2, 19, 0, 10, 0),
+            TimeSpan.FromMinutes(5));
+
+        IReadOnlyList<ActiveIntervalRow> intervals =
+        [
+            new("appA.exe", Utc(2026, 2, 19, 0, 0, 0), Utc(2026, 2, 19, 0, 5, 0))
+        ];
+
+        IReadOnlyList<StateStackRowLayout> result = builder.BuildDailyStateStackRowsFromIntervals(intervals, window, trackWidth: 100);
+        StateStackRowLayout active = Assert.Single(result);
+        StackedColumnLayout column = Assert.Single(active.Columns, x => !x.IsNoData);
+        StackedEntryLayout entry = Assert.Single(column.Entries);
+
+        Assert.Matches(@".*\d{2}:\d{2}:\d{2}-\d{2}:\d{2}:\d{2} \| \d{2}:\d{2}:\d{2}$", entry.Tooltip);
+    }
+
+    [Fact]
     public void BuildOverviewRows_ForWeek_ReturnsSevenDayRows_WithCappedTotals()
     {
         var builder = new TimelineLayoutBuilder();
