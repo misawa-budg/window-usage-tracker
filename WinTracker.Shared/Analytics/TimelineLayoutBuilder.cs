@@ -494,14 +494,11 @@ public sealed class TimelineLayoutBuilder
             double occupiedSeconds = Math.Min((double)window.BucketSeconds, apps.Sum(x => x.Seconds));
             totalSeconds += occupiedSeconds;
 
-            if (occupiedSeconds <= 0)
+            AppUsage topApp = apps.OrderByDescending(x => x.Seconds).First();
+            var displayApps = new List<AppUsage>
             {
-                accumulator.AddNoData(bucketWidth);
-                continue;
-            }
-
-            double scale = apps.Sum(x => x.Seconds) > 0 ? occupiedSeconds / apps.Sum(x => x.Seconds) : 0;
-            var displayApps = apps.Select(x => new AppUsage(x.ExeName, x.Seconds * scale, x.ColorHex)).ToList();
+                new AppUsage(topApp.ExeName, occupiedSeconds, topApp.ColorHex)
+            };
             double width = bucketWidth * (occupiedSeconds / window.BucketSeconds);
 
             accumulator.AddData(

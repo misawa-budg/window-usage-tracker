@@ -274,7 +274,6 @@
                                                             <TextBlock
                                                                 VerticalAlignment="Center"
                                                                 FontSize="14"
-                                                                FontWeight="SemiBold"
                                                                 Foreground="{ThemeResource BrushTextPrimary}"
                                                                 Text="{x:Bind Label}" />
 

@@ -39,7 +39,6 @@ internal sealed class SqliteTimelineQueryService : IDisposable
                 FROM app_events
                 WHERE state_end_utc > $from_utc
                   AND state_start_utc < $to_utc
-                  AND source <> $excluded_source
             ),
             overlaps AS (
                 SELECT
