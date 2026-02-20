@@ -1,19 +1,34 @@
 # WinTracker
 
-Windows 11 向けの学習用プロジェクトです。  
-`Collector` がアプリ状態を SQLite に蓄積し、`Viewer` が 24h / 1week タイムラインを表示します。
+Windows 11 向けの軽量なアプリケーション利用時間トラッカー（学習用プロジェクト）です。  
+`Collector` がアプリのアクティブ状態を SQLite に自動蓄積し、`Viewer` が 24h / 1week のタイムラインで時間の使い方を可視化します。
 
 ## 構成
-- `WinTracker.Collector`: 常駐収集（UIなし）
-- `WinTracker.Viewer`: 可視化 GUI（WinUI 3）
+- `WinTracker.Collector`: 常駐収集プロセス（UIなし）
+- `WinTracker.Viewer`: 可視化ダッシュボード（WinUI 3）
 - `WinTracker.Shared`: 共通モデル
 
-## 前提
-- Windows 11
-- .NET SDK 10（Collector / テスト）
-- .NET SDK 8 + WinUI 3 実行環境（Viewer）
+## 実行方法
 
-## 開発時の実行
+配布されたZipファイル（例：`wintracker-portable-*.zip`）を展開し、中にある以下の `.cmd` ファイルをダブルクリックするだけで利用できます。
+いずれも同じ設定ファイル（`data/collector.db`等）を共有して動作します。
+
+1. **`Run-Collector.cmd`**: アプリの利用時間の記録を開始します。（バックグラウンドで常駐）
+2. **`Run-Viewer.cmd`**: 記録されたデータをタイムラインダッシュボードとして表示します。
+
+## 主な機能（Viewer）
+
+最新仕様のタイムライン表示に対応しています。
+
+- **期間切替**: `24h`（当日） / `1week`（直近7日）に切り替えて表示。
+- **一覧タイムライン（Overview）**: その時間帯の「最もアクティブだった単一アプリ（最前面）」だけを抽出して1本のバーに表示し、何をやっていたか直感的に把握できます。
+- **アプリ別タイムライン**: アプリごとの稼働状況を `Active` / `Open` / `Minimized` の濃淡で詳細に表示します。
+
+## 前提条件
+- Windows 11
+- .NET 8 ランタイム 及び Windows App SDK（WinUI 3 実行環境）
+
+## 開発・ビルド時の実行
 ```powershell
 # Collector 起動（Ctrl+C で停止）
 dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj
@@ -22,93 +37,21 @@ dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj
 dotnet run --project .\WinTracker.Viewer\WinTracker.Viewer.csproj
 ```
 
-補助コマンド:
+**テストデータの投入（シード）**
+UIの確認用にダミーデータを流し込むことができます。
 ```powershell
-# ダミーデータ投入（粗い粒度: 1時間ベース）
-dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- seed 24h hourly --replace
-
-# ダミーデータ投入（混在粒度: 1分〜45分）
+# テストデータの投入
 dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- seed 24h mixed --replace
-
-# ダミーデータ投入（細かい粒度: 1〜3分）
-dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- seed 24h minute --replace
-
-# 期間内の全データを削除してseedだけにする（検証用・破壊的）
-dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- seed 24h mixed --replace-all
-
-# 集計レポート（CLI）
-dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- report 24h
 ```
 
-注:
-- `seed` で投入される `source=demo-seed` データは Viewer では表示されません。
-- `--replace` は `source=demo-seed` のみ置換し、`--replace-all` は期間内の全sourceを削除してから投入します。
+## 配布パッケージの作成
 
-Viewer 表示仕様（現行）:
-- `24h`
-  - 一覧: `Running` 1行（同時アプリは縦分割）
-  - アプリ別: アプリごとに1行
-- `1week`
-  - 一覧: 日付ごとの `Running` 行（7行）
-  - アプリ別: 選択アプリの日付行（7行）
-- アプリ別の色は「アプリ固有色 + 状態トーン（Active/Open/Minimized）」です。
-
-## テスト
-```powershell
-dotnet test .\WinTracker.Collector.Tests\WinTracker.Collector.Tests.csproj
-dotnet test .\WinTracker.Viewer.Tests\WinTracker.Viewer.Tests.csproj
-```
-
-## 生成データ
-- DB: `data/collector.db`（カレントディレクトリ基準）
-- Collector 設定: `WinTracker.Collector/collector.settings.json`
-
-## 配布（推奨）
-配布先で確実にDB共有させるには、`release.ps1` が生成する **portable zip** を使ってください。
-
-- `wintracker-portable-win-x64-fd.zip`
-- `wintracker-portable-win-x64-sc.zip`
-
-これらは次の構成で同梱されます。
-
-- `collector\`（Collector本体）
-- `viewer\`（Viewer本体）
-- `data\`（共有DB置き場）
-- `collector.settings.json`（ルート配置）
-- `Run-Collector.cmd`
-- `Run-Viewer.cmd`
-
-起動は `Run-Collector.cmd` / `Run-Viewer.cmd` をダブルクリックしてください。  
-この起動方法なら、両方が同じ `data\collector.db` を参照します。
-
-補足:
-- `collector-*.zip` と `viewer-*.zip` を別々に配る方式も可能ですが、利用者が作業ディレクトリを揃えないとDB共有できません。
-
-## 一括配布スクリプト
-`release.ps1` で以下を一括生成できます。
-- `collector/viewer` の `framework-dependent`（`-fd`）版
-- `collector/viewer` の `self-contained`（`-sc`）版
-- `portable`（Collector+Viewer+共有data+起動cmd同梱）の `-fd / -sc` 版
-- 各成果物の `.zip`
-
-注:
-- Collector は `dotnet publish` を使用
-- Viewer は WinUI 3 の安定性のため `dotnet build` 産物を配布フォルダへコピー
+`release.ps1` を実行することで、再配布可能な実行ファイルと `.cmd` が各構成（Portable形式・個別アプリ形式など）で `.zip` 生成されます。
 
 ```powershell
-# 既定: Release / win-x64 / artifacts 出力（zipあり）
+# Releaseビルドを行い全zipパッケージを生成
 powershell -ExecutionPolicy Bypass -File .\release.ps1
-
-# zip不要の場合
-powershell -ExecutionPolicy Bypass -File .\release.ps1 -NoZip
-
-# 実行中WinTrackerプロセスを停止せずに実行する場合
-powershell -ExecutionPolicy Bypass -File .\release.ps1 -StopRunningApps:$false
 ```
-
-## 注意
-- Viewer は WinUI 3 実行環境（Windows App SDK）が必要です。
-- Collector は単一インスタンス起動です（多重起動すると終了します）。
 
 ## License
 MIT License (`LICENSE`)
