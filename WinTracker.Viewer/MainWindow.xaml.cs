@@ -14,6 +14,12 @@ namespace WinTracker.Viewer;
 
 public sealed partial class MainWindow : Window
 {
+    private enum AppDisplayMode
+    {
+        Running,
+        StateDetails
+    }
+
     private const double BucketTrackWidth = 760.0;
     private const double DailyTrackWidth = 960.0;
     private const int TopAppCount = 8;
@@ -39,6 +45,7 @@ public sealed partial class MainWindow : Window
     private IReadOnlyList<TimelineUsageRow> _timelineRows = [];
     private IReadOnlyList<ActiveIntervalRow> _activeIntervals = [];
     private IReadOnlyList<AppStateIntervalRow> _stateIntervals = [];
+    private AppDisplayMode _appDisplayMode = AppDisplayMode.Running;
     private UsageQueryWindow _currentWindow = CreateLocalDay24hWindow();
     private CancellationTokenSource? _reloadCts;
     private bool _isInitialized;
@@ -160,6 +167,18 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void OnAppDisplayModeSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_isInitialized)
+        {
+            return;
+        }
+
+        _appDisplayMode = GetAppDisplayMode();
+        RebuildAppRowsByCurrentMode();
+        RebuildAppLegend();
+    }
+
     private async Task ReloadAsync()
     {
         _reloadCts?.Cancel();
@@ -187,6 +206,7 @@ public sealed partial class MainWindow : Window
                     query.QueryActiveIntervals(_currentWindow),
                     query.QueryStateIntervals(_currentWindow));
             }, token);
+            _appDisplayMode = GetAppDisplayMode();
 
             if (GetRangeLabel() == "24h")
             {
@@ -236,7 +256,9 @@ public sealed partial class MainWindow : Window
 
     private void SetAppMode(bool isDaily24h)
     {
-        AppSelectorCard.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
+        AppSelectorCard.Visibility = Visibility.Visible;
+        AppLabelTextBlock.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
+        AppComboBox.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
         AppDailyPanel.Visibility = Visibility.Visible;
         AppWeekHeader.Visibility = Visibility.Collapsed;
         AppTimelineListView.Visibility = Visibility.Collapsed;
@@ -253,6 +275,14 @@ public sealed partial class MainWindow : Window
 
     private string GetRangeLabel() =>
         (RangeComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() == "1week" ? "1week" : "24h";
+
+    private AppDisplayMode GetAppDisplayMode()
+    {
+        string? mode = (AppDisplayModeComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString();
+        return string.Equals(mode, "State詳細", StringComparison.Ordinal)
+            ? AppDisplayMode.StateDetails
+            : AppDisplayMode.Running;
+    }
 
     private static UsageQueryWindow CreateLocalDay24hWindow()
     {
@@ -379,7 +409,11 @@ public sealed partial class MainWindow : Window
     private void RebuildAppLegend()
     {
         _appLegendItems.Clear();
-        IReadOnlyList<LegendItemLayout> legendItems = _layoutBuilder.BuildAppLegend();
+        IReadOnlyList<LegendItemLayout> legendItems =
+            _appDisplayMode == AppDisplayMode.Running
+                ? _layoutBuilder.BuildAppRunningLegend()
+                : _layoutBuilder.BuildAppLegend();
+
         foreach (LegendItemLayout item in legendItems)
         {
             _appLegendItems.Add(new LegendItemViewModel(
@@ -408,8 +442,9 @@ public sealed partial class MainWindow : Window
     private void BuildAppDailyRows()
     {
         _appDailyLanes.Clear();
+        IReadOnlyList<AppStateIntervalRow> intervals = GetAppDisplayIntervals();
         IReadOnlyList<StateLaneLayout> lanes = _layoutBuilder.BuildDailyAppRowsFromIntervals(
-            _stateIntervals,
+            intervals,
             _currentWindow,
             DailyTrackWidth);
 
@@ -432,8 +467,9 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        IReadOnlyList<AppStateIntervalRow> intervals = GetAppDisplayIntervals();
         IReadOnlyList<TimelineRowLayout> rows = _layoutBuilder.BuildAppTimelineRowsFromIntervals(
-            _stateIntervals,
+            intervals,
             _currentWindow,
             app,
             DailyTrackWidth);
@@ -510,8 +546,41 @@ public sealed partial class MainWindow : Window
     {
         RefreshButton.IsEnabled = !busy;
         RangeComboBox.IsEnabled = !busy;
+        AppDisplayModeComboBox.IsEnabled = !busy;
         AppComboBox.IsEnabled = !busy;
         StatusTextBlock.Text = status;
+    }
+
+    private IReadOnlyList<AppStateIntervalRow> GetAppDisplayIntervals()
+    {
+        if (_appDisplayMode == AppDisplayMode.StateDetails)
+        {
+            return _stateIntervals;
+        }
+
+        var runningIntervals = new List<AppStateIntervalRow>(_stateIntervals.Count);
+        foreach (AppStateIntervalRow interval in _stateIntervals)
+        {
+            runningIntervals.Add(new AppStateIntervalRow(
+                interval.ExeName,
+                "Running",
+                interval.StateStartUtc,
+                interval.StateEndUtc));
+        }
+
+        return runningIntervals;
+    }
+
+    private void RebuildAppRowsByCurrentMode()
+    {
+        if (GetRangeLabel() == "24h")
+        {
+            BuildAppDailyRows();
+            return;
+        }
+
+        RebuildAppNames();
+        BuildWeeklyAppRows();
     }
 
 

@@ -122,6 +122,14 @@ public sealed class TimelineLayoutBuilder
         ];
     }
 
+    public IReadOnlyList<LegendItemLayout> BuildAppRunningLegend()
+    {
+        return
+        [
+            new LegendItemLayout("Running（状態を統合表示）", "BrushTextSecondary")
+        ];
+    }
+
     public IReadOnlyList<StateLaneLayout> BuildDailyOverviewLanes(
         IReadOnlyList<TimelineUsageRow> timelineRows,
         UsageQueryWindow window,
