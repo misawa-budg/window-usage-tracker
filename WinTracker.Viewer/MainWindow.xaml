@@ -38,13 +38,24 @@
                                     Foreground="{ThemeResource BrushTextSecondary}"
                                     Text="Application usage timeline" />
                             </StackPanel>
-                            <TextBlock
-                                x:Name="StatusTextBlock"
+                            <StackPanel
                                 Grid.Column="1"
+                                HorizontalAlignment="Right"
                                 VerticalAlignment="Center"
-                                FontSize="12"
-                                Foreground="{ThemeResource BrushTextSecondary}"
-                                Text="Ready" />
+                                Spacing="2">
+                                <TextBlock
+                                    x:Name="CollectorStatusTextBlock"
+                                    HorizontalAlignment="Right"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource BrushTextSecondary}"
+                                    Text="Collector: Unknown" />
+                                <TextBlock
+                                    x:Name="StatusTextBlock"
+                                    HorizontalAlignment="Right"
+                                    FontSize="12"
+                                    Foreground="{ThemeResource BrushTextSecondary}"
+                                    Text="Ready" />
+                            </StackPanel>
                         </Grid>
                     </Border>
                 </Grid>

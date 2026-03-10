@@ -2,7 +2,7 @@ using Microsoft.Data.Sqlite;
 
 internal sealed class SqliteEventWriter : IAppEventWriter
 {
-    private const int BatchSize = 50;
+    private const int BatchSize = 30;
 
     private readonly SqliteConnection _connection;
     private readonly SqliteCommand _insertCommand;

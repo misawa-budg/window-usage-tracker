@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -41,6 +42,7 @@ public sealed partial class MainWindow : Window
     private readonly ObservableCollection<LegendItemViewModel> _overviewLegendItems = [];
     private readonly ObservableCollection<LegendItemViewModel> _appLegendItems = [];
     private readonly TimelineLayoutBuilder _layoutBuilder = new(topAppCount: TopAppCount);
+    private readonly DispatcherQueueTimer _collectorStatusTimer;
 
     private IReadOnlyList<TimelineUsageRow> _timelineRows = [];
     private IReadOnlyList<ActiveIntervalRow> _activeIntervals = [];
@@ -65,6 +67,13 @@ public sealed partial class MainWindow : Window
         AppComboBox.ItemsSource = _appNames;
         OverviewLegendItemsControl.ItemsSource = _overviewLegendItems;
         AppLegendItemsControl.ItemsSource = _appLegendItems;
+
+        _collectorStatusTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
+        _collectorStatusTimer.Interval = TimeSpan.FromSeconds(3);
+        _collectorStatusTimer.IsRepeating = true;
+        _collectorStatusTimer.Tick += OnCollectorStatusTimerTick;
+        _collectorStatusTimer.Start();
+        UpdateCollectorStatus();
 
         _isInitialized = true;
         _ = ReloadAsync();
@@ -239,7 +248,38 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
+            UpdateCollectorStatus();
             SetBusy(false, StatusTextBlock.Text);
+        }
+    }
+
+    private void OnCollectorStatusTimerTick(DispatcherQueueTimer sender, object args)
+    {
+        UpdateCollectorStatus();
+    }
+
+    private void UpdateCollectorStatus()
+    {
+        CollectorStatusTextBlock.Text = IsCollectorRunning()
+            ? "Collector: Running"
+            : "Collector: Stopped";
+    }
+
+    private static bool IsCollectorRunning()
+    {
+        try
+        {
+            if (!Mutex.TryOpenExisting(@"Local\WinTrackerCollector", out Mutex? mutex))
+            {
+                return false;
+            }
+
+            mutex.Dispose();
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 
