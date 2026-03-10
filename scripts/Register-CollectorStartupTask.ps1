@@ -31,7 +31,7 @@ $trigger = New-ScheduledTaskTrigger -AtLogOn -User $currentUser
 
 $principal = New-ScheduledTaskPrincipal `
     -UserId $currentUser `
-    -LogonType InteractiveToken `
+    -LogonType Interactive `
     -RunLevel Limited
 
 $settings = New-ScheduledTaskSettingsSet `
