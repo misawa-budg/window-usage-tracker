@@ -33,14 +33,25 @@ else {
 }
 $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 
+$launcherPath = Join-Path $resolvedWorkingDirectory "Run-Collector-Hidden.vbs"
+$escapedExePath = $resolvedExePath.Replace("""", """""")
+$escapedWorkingDirectory = $resolvedWorkingDirectory.Replace("""", """""")
+$launcherBody = @(
+    "Set shell = CreateObject(""WScript.Shell"")"
+    ('shell.CurrentDirectory = "{0}"' -f $escapedWorkingDirectory)
+    ('shell.Run """{0}"" --background", 0, False' -f $escapedExePath)
+)
+Set-Content -Path $launcherPath -Value $launcherBody -Encoding ASCII
+
 $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 if ($null -ne $existing) {
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
 }
 
+$wscriptPath = Join-Path $env:WINDIR "System32\wscript.exe"
 $action = New-ScheduledTaskAction `
-    -Execute $resolvedExePath `
-    -Argument "--background" `
+    -Execute $wscriptPath `
+    -Argument "`"$launcherPath`"" `
     -WorkingDirectory $resolvedWorkingDirectory
 
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $currentUser
@@ -68,3 +79,4 @@ Write-Host "Registered task: $TaskName"
 Write-Host "Collector: $resolvedExePath"
 Write-Host "Mode: --background"
 Write-Host "WorkingDirectory: $resolvedWorkingDirectory"
+Write-Host "Launcher: $launcherPath"
