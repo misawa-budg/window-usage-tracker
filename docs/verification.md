@@ -129,13 +129,26 @@ Desktopの実DB（約41.2 MiB）をReadOnlyで参照。2026-09-10〜09-16の7日
 - 最小サイズ・ライト表示・実データの多数アプリ時の凡例折り返し、ツールチップ・キー操作の回帰確認と性能再計測は未実施。合成5アプリでの視覚確認を、全条件の検証済みとは扱わない。
 - 最終確認用ビルド: `artifacts/visual-cleanup-20260916-final/viewer`。同じフォルダの `Run-Viewer-With-Desktop-Data.cmd` はDesktop DBを読み取り専用で開くViewerのみを起動し、Collectorの差替えや起動・停止を行わない。`Run-Viewer-With-Existing-Demo.cmd` は既存の合成DBを利用し、seedや置換は行わない。
 
-## その他の仕様の根拠
-
-### 表示注釈の削除（2026-09-16）
+## 表示注釈の削除（2026-09-16）
 
 - ユーザー指示で上段の説明・下段の説明・最下部の欠測注釈を画面から削除。状態の意味と測定の限界はarchitecture/interview-notesに残す。見出し・凡例・集計ロジックは変更していない。
 - Viewerテスト36件成功、Release/self-containedビルドは警告0・エラー0。今回の変更版は `artifacts/annotation-cleanup-20260916/viewer`。同じフォルダの `Run-Viewer-With-Desktop-Data.cmd` は既存のDesktopデータでViewerのみを開く。起動中のViewer・Desktop配布版は差し替えておらず、削除後の実画面は未確認。
 - セクションの枠・背景色は検討のみ。Carbonの[背景階層の実例](https://carbondesignsystem.com/elements/color/usage/)とGrafanaの[パネル実例](https://grafana.com/docs/grafana/latest/visualizations/panels-visualizations/panel-editor-overview/)をブラウザで確認。現状のDarkはページ背景#202020、帯の背景#1F1F1Fとほぼ同色で、描画領域の境界が見えにくい。セクション単位の薄い境界と背景明度差を次の比較候補とする。
+
+## ダーク表示の区切りとDesktop配布版の更新（2026-09-16）
+
+- ユーザーの承認によりダーク表示を固定し、上下のグラフセクションだけを1pxの薄い枠・6pxの角丸で囲った。ページ背景#202020、セクション#292929、トラック#242424と明度差を付けた。行単位のカードや削除済みの注釈は戻していない。
+- 共通テンプレートの6・12・18時の補助線をデータの背面へ追加。ヒットテスト対象から外し、区間の色・幅・集計・ツールチップの計算は変更していない。
+- Collector 32件＋Viewer 38件＝70件成功。追加2件はセクション・テーマ指定と補助線の配置／非入力性のXAML契約テスト。`release.ps1 -OutputRoot artifacts/desktop-release-20260916 -NoZip` でFD/SC両方を生成し、Viewerは警告0・エラー0。
+- 配布前後の実データ・1426×746の今日表示で、枠・背景差・補助線、実アプリが多い場合の凡例折り返し、注釈の撤去を実画面確認。全アプリを見るには従来どおり縦スクロールする。自動クリックは再び `SendInput sent 0 of 1 events; GetLastError=87` で失敗したため、今回の週／状態切替の実操作と性能再計測、最小サイズ・高DPIの検証は未実施。
+- Desktopの `window-usage-tracker-portable-win-x64-sc` を同名の新版へ置換。Collector、Viewerとも更新し、旧設定JSONと既存の非表示起動VBSは内容を保持。ログオン時の既存タスクの設定は変更していない。
+- 稼働中にSQLite backup APIで事前バックアップを取得。旧Collectorは停止イベントに未対応だったため、実行ファイルのパスとコンソール参加PIDを検査した限定的なCtrl+C通知で正常終了させ、終了後にもバックアップを取得した。強制終了は行っていない。
+- 終了時の未保存25件を含む128,305件を移行。停止後のDBと配置先DBのファイルハッシュが一致。さらに全カラムをID順に正規化した移行前レコードのSHA-256が、配置前・配置後・新規記録追加後で一致し、`PRAGMA integrity_check` はすべて `ok`。データ本体やタイトルはGit・検証ログへ出力していない。
+- 旧インストール全体と2つのDBバックアップを `Documents/WinTracker-backups/20260916-2204` に保存。旧版はDesktopから退避したが完全削除していないため復旧可能。Collector切替の記録空白は約1分。
+- 新版の `--stop` による正常終了と、既存の `Run-Collector-Hidden.vbs` による再起動を確認。再起動後はDesktopのCollectorが1プロセスで稼働し、新規記録が増えることと移行済み行が不変なことを確認した。ログオンし直す試験や長時間の運用試験までは行っていない。
+- 新規記録には今回までのActive > Open > Minimized、15秒チェックポイント、既定のタイトル非保存が適用される。過去のタイトルや状態は書き換えていない。既存データの意味と新規収集ルールの変更は区別する。
+
+## その他の仕様の根拠
 
 - [Windows console HandlerRoutine](https://learn.microsoft.com/en-us/windows/console/handlerroutine)
 - [SetConsoleCtrlHandlerのログオフ/シャットダウン制約](https://learn.microsoft.com/en-us/windows/console/setconsolectrlhandler)
