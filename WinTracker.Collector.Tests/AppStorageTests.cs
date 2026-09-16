@@ -56,4 +56,19 @@ public sealed class AppStorageTests
         Assert.True(DummySeedConsole.TryHandle(["seed", "--replace-all"], new CollectorSettings(), root));
         Assert.False(Directory.Exists(root));
     }
+
+    [Fact]
+    public void DemoActiveIntervalsNeverOverlapAndRunningTimeIsPreserved()
+    {
+        var start = DateTimeOffset.UnixEpoch;
+        var events = DummySeedConsole.NormalizeActiveIntervals(new[]
+        {
+            new AppEvent(start, start.AddSeconds(10), "a.exe", 1, "", "", "Active", "demo-seed"),
+            new AppEvent(start.AddSeconds(5), start.AddSeconds(15), "b.exe", 2, "", "", "Active", "demo-seed")
+        });
+        var active = events.Where(x => x.State == "Active").ToArray();
+        Assert.Equal(active[0].StateEndUtc, active[1].StateStartUtc);
+        Assert.Equal(20, events.Sum(x => (x.StateEndUtc - x.StateStartUtc).TotalSeconds));
+        Assert.Contains(events, x => x.ExeName == "b.exe" && x.State == "Open");
+    }
 }

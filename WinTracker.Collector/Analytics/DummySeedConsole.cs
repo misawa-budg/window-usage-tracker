@@ -80,7 +80,7 @@ internal static class DummySeedConsole
             DeleteRows(sqlitePath, fromUtc, toUtc);
         }
 
-        IReadOnlyList<AppEvent> events = BuildEvents(fromUtc, toUtc, profile);
+        IReadOnlyList<AppEvent> events = NormalizeActiveIntervals(BuildEvents(fromUtc, toUtc, profile));
         using var writer = new SqliteEventWriter(sqlitePath);
         foreach (AppEvent appEvent in events)
         {
@@ -90,6 +90,29 @@ internal static class DummySeedConsole
         Console.WriteLine(
             $"DEMO seed completed: rows={events.Count}, range={range}, profile={profile.ToString().ToLowerInvariant()}, replace={replace}, db={sqlitePath}");
         return true;
+    }
+
+    internal static IReadOnlyList<AppEvent> NormalizeActiveIntervals(IEnumerable<AppEvent> events)
+    {
+        var result = new List<AppEvent>();
+        DateTimeOffset activeUntil = DateTimeOffset.MinValue;
+        foreach (AppEvent row in events.OrderBy(x => x.StateStartUtc).ThenBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase))
+        {
+            if (row.State != "Active") { result.Add(row); continue; }
+            DateTimeOffset activeStart = row.StateStartUtc;
+            if (activeStart < activeUntil)
+            {
+                DateTimeOffset overlapEnd = activeUntil < row.StateEndUtc ? activeUntil : row.StateEndUtc;
+                result.Add(row with { StateEndUtc = overlapEnd, State = "Open" });
+                activeStart = overlapEnd;
+            }
+            if (activeStart < row.StateEndUtc)
+            {
+                result.Add(row with { StateStartUtc = activeStart });
+                activeUntil = row.StateEndUtc;
+            }
+        }
+        return result;
     }
 
     private static IReadOnlyList<AppEvent> BuildEvents(DateTimeOffset fromUtc, DateTimeOffset toUtc, SeedProfile profile)
