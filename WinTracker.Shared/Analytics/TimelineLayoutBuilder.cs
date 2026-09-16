@@ -1277,14 +1277,6 @@ public sealed class TimelineLayoutBuilder
         return order == 0 ? StringComparer.OrdinalIgnoreCase.Compare(left.ExeName, right.ExeName) : order;
     }
 
-    private static string SelectDominantState(IReadOnlyList<AppStateIntervalRow> candidates) =>
-        candidates
-            .OrderByDescending(x => StatePriority(x.State))
-            .ThenByDescending(x => x.StateStartUtc)
-            .ThenBy(x => x.State, StringComparer.OrdinalIgnoreCase)
-            .First()
-            .State;
-
     private static int StatePriority(string state)
     {
         if (string.Equals(state, "Active", StringComparison.OrdinalIgnoreCase))

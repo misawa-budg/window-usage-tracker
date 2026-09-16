@@ -20,7 +20,7 @@
     - `TimelineUsageRow`
     - `AppStateUsageRow`
     - `AppUsageSummaryRow`
-    - 互換のため `SharedPlaceholder` も残存
+    - タイムライン上の区間検索（`TrackHitTest`）
 - `WinTracker.Viewer`
   - 役割: SQLiteログを読み取り可視化するGUI
   - UI方針: WinUI 3（Windows App SDK）
