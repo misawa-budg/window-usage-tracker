@@ -34,6 +34,22 @@ public sealed class AppStorageTests
     }
 
     [Fact]
+    public void DirectPortableExeUsesBundleSettingsNotNestedSettings()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"wintracker-portable-{Guid.NewGuid():N}");
+        string collector = Path.Combine(root, "collector");
+        Directory.CreateDirectory(collector);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Run-Collector.cmd"), "");
+            File.WriteAllText(Path.Combine(root, "collector.settings.json"), "{}");
+            File.WriteAllText(Path.Combine(collector, "collector.settings.json"), "{}");
+            Assert.Equal(root, AppStorage.Resolve(collector, collector, "").Root);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public void SeedWithoutDemoRefusesToCreateDatabase()
     {
         string root = Path.Combine(Path.GetTempPath(), $"wintracker-seed-{Guid.NewGuid():N}");

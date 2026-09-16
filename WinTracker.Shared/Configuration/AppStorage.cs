@@ -14,6 +14,10 @@ public static class AppStorage
         {
             for (DirectoryInfo? directory = new(origin); directory is not null; directory = directory.Parent)
             {
+                if (directory.Parent is { } bundle &&
+                    File.Exists(Path.Combine(bundle.FullName, "Run-Collector.cmd")) &&
+                    File.Exists(Path.Combine(bundle.FullName, "collector.settings.json")))
+                    return AtRoot(bundle.FullName);
                 if (File.Exists(Path.Combine(directory.FullName, "WinTracker.slnx")))
                     return (directory.FullName, Path.Combine(directory.FullName, "WinTracker.Collector", "collector.settings.json"));
                 if (File.Exists(Path.Combine(directory.FullName, "collector.settings.json")))
