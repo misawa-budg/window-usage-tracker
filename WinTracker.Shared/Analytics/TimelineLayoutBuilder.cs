@@ -116,9 +116,9 @@ public sealed class TimelineLayoutBuilder
     {
         return
         [
-            new LegendItemLayout("Active", ActiveColorKey),
-            new LegendItemLayout("Open", OpenColorKey),
-            new LegendItemLayout("Minimized", MinimizedColorKey)
+            new LegendItemLayout("Active（濃）", ColorForAppState("legend", "Active")),
+            new LegendItemLayout("Open（中）", ColorForAppState("legend", "Open")),
+            new LegendItemLayout("Minimized（淡）", ColorForAppState("legend", "Minimized"))
         ];
     }
 
