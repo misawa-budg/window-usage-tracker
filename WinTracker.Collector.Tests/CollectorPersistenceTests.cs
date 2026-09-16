@@ -54,6 +54,26 @@ public sealed class CollectorPersistenceTests
         await Assert.ThrowsAsync<IOException>(() => run.WaitAsync(TimeSpan.FromSeconds(2)));
     }
 
+    [Theory]
+    [InlineData(false, "")]
+    [InlineData(true, "private title")]
+    public void TitlesArePersistedOnlyWithExplicitOptIn(bool enabled, string expected)
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"wintracker-{Guid.NewGuid():N};privacy.db");
+        try
+        {
+            using var writer = new SqliteEventWriter(path, enabled);
+            writer.Write(new AppEvent(Start, Start.AddSeconds(1), "test.exe", 1, "0x1", "private title", "Active", "test"));
+            writer.Flush();
+            using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ToString());
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT title FROM app_events";
+            Assert.Equal(expected, command.ExecuteScalar());
+        }
+        finally { SqliteConnection.ClearAllPools(); File.Delete(path); }
+    }
+
     internal static Dictionary<string, AppSnapshot> Snapshot(string state) => new(StringComparer.OrdinalIgnoreCase)
     {
         ["editor.exe"] = new AppSnapshot("editor.exe", 1, "0x1", "test", state)

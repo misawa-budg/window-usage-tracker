@@ -36,7 +36,7 @@ Console.WriteLine("Event-driven collector started. Press Ctrl+C to stop.");
 Console.WriteLine($"Rescan interval: {settings.RescanIntervalSeconds}s");
 
 string sqlitePath = Path.Combine(appRootPath, settings.SqliteFilePath);
-using var eventWriter = new SqliteEventWriter(sqlitePath);
+using var eventWriter = new SqliteEventWriter(sqlitePath, settings.StoreWindowTitles);
 Console.WriteLine($"Logging to SQLite: {sqlitePath}");
 
 using var cts = new CancellationTokenSource();

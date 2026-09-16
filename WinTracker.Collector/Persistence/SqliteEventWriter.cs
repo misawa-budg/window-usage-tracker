@@ -8,16 +8,21 @@ internal sealed class SqliteEventWriter : IAppEventWriter
     private readonly SqliteCommand _insertCommand;
     private readonly List<AppEvent> _buffer = [];
     private bool _disposed;
+    private readonly bool _storeWindowTitles;
 
-    public SqliteEventWriter(string databasePath)
+    public SqliteEventWriter(string databasePath, bool storeWindowTitles = false)
     {
+        _storeWindowTitles = storeWindowTitles;
         string? directoryPath = Path.GetDirectoryName(databasePath);
         if (!string.IsNullOrWhiteSpace(directoryPath))
         {
             Directory.CreateDirectory(directoryPath);
         }
 
-        _connection = new SqliteConnection($"Data Source={databasePath};Mode=ReadWriteCreate;Cache=Shared");
+        _connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath, Mode = SqliteOpenMode.ReadWriteCreate, Cache = SqliteCacheMode.Shared
+        }.ToString());
         _connection.Open();
         InitializeSchema(_connection);
 
@@ -64,7 +69,7 @@ internal sealed class SqliteEventWriter : IAppEventWriter
             throw new ObjectDisposedException(nameof(SqliteEventWriter));
         }
 
-        _buffer.Add(appEvent);
+        _buffer.Add(_storeWindowTitles ? appEvent : appEvent with { Title = string.Empty });
         if (_buffer.Count >= BatchSize)
         {
             FlushBuffer();

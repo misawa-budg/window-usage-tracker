@@ -4,6 +4,7 @@ internal sealed class CollectorSettings
     public int PollingIntervalSeconds { get; init; } = 0;
     public int RescanIntervalSeconds { get; init; } = 300;
     public int CheckpointIntervalSeconds { get; init; } = 15;
+    public bool StoreWindowTitles { get; init; } = false;
     public string SqliteFilePath { get; init; } = Path.Combine("data", "collector.db");
 
     public string[] ExcludedExeNames { get; init; } =
