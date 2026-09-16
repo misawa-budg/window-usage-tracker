@@ -1,154 +1,86 @@
-using System.Text.Json;
 using System.Threading.Channels;
 
 internal static class ForegroundCollector
 {
-    public static async Task RunEventDrivenAsync(
-        CancellationToken cancellationToken,
-        IAppEventWriter eventWriter,
-        CollectorSettings settings)
+    public static async Task RunEventDrivenAsync(CancellationToken cancellationToken,
+        IAppEventWriter eventWriter, CollectorSettings settings)
     {
-        var excludedExeNames = new HashSet<string>(settings.ExcludedExeNames, StringComparer.OrdinalIgnoreCase);
-        var intervalsByApp = new Dictionary<string, AppInterval>(StringComparer.OrdinalIgnoreCase);
-        var signals = Channel.CreateUnbounded<CollectReason>(new UnboundedChannelOptions
+        var excluded = new HashSet<string>(settings.ExcludedExeNames, StringComparer.OrdinalIgnoreCase);
+        // Signals request fresh snapshots, not individual events; bound pending work.
+        var signals = Channel.CreateBounded<CollectReason>(new BoundedChannelOptions(1)
         {
-            SingleReader = true,
-            SingleWriter = false
+            SingleReader = true, SingleWriter = false, FullMode = BoundedChannelFullMode.Wait
         });
-
-        using var hookPump = new WinEventHookPump(reason => _ = signals.Writer.TryWrite(reason));
+        int captureRequested = 1;
+        using var hookPump = new WinEventHookPump(reason =>
+        {
+            Interlocked.Exchange(ref captureRequested, 1);
+            signals.Writer.TryWrite(reason);
+        });
         hookPump.Start();
-        _ = signals.Writer.TryWrite(CollectReason.Startup);
-
+        signals.Writer.TryWrite(CollectReason.Startup);
         using var producerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        using var rescanTimer = new PeriodicTimer(TimeSpan.FromSeconds(settings.RescanIntervalSeconds));
-        Task rescanTask = Task.Run(async () =>
-        {
-            try
-            {
-                while (await rescanTimer.WaitForNextTickAsync(producerCancellation.Token))
-                {
-                    _ = signals.Writer.TryWrite(CollectReason.Rescan);
-                }
-            }
-            catch (OperationCanceledException)
-            {
-            }
-        });
-
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(settings.CheckpointIntervalSeconds));
+        Task producer = ProduceTicksAsync();
         try
         {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                CollectReason reason;
-                try
-                {
-                    reason = await signals.Reader.ReadAsync(cancellationToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-
-                while (signals.Reader.TryRead(out CollectReason nextReason))
-                {
-                    reason = nextReason;
-                }
-
-                DateTimeOffset observedAtUtc = DateTimeOffset.UtcNow;
-                Dictionary<string, AppSnapshot> currentByApp = WindowSnapshotProvider.CaptureCurrentStates(excludedExeNames);
-                string source = reason == CollectReason.Rescan ? "rescan" : "win_event";
-                ApplySnapshot(currentByApp, observedAtUtc, source, intervalsByApp, eventWriter);
-            }
+            await RunLoopAsync(signals.Reader, cancellationToken, eventWriter, settings,
+                () => WindowSnapshotProvider.CaptureCurrentStates(excluded),
+                scanRequested: () => Interlocked.Exchange(ref captureRequested, 0) != 0);
         }
         finally
         {
-            // A capture/write exception must also stop the producer before awaiting it.
             producerCancellation.Cancel();
-            await rescanTask;
+            await producer;
+        }
 
-            DateTimeOffset stoppedAtUtc = DateTimeOffset.UtcNow;
-            foreach (AppInterval intervalState in intervalsByApp.Values)
+        async Task ProduceTicksAsync()
+        {
+            try
             {
-                WriteClosedInterval(eventWriter, intervalState with { StateEndUtc = stoppedAtUtc }, "shutdown");
+                while (await timer.WaitForNextTickAsync(producerCancellation.Token))
+                    signals.Writer.TryWrite(CollectReason.Checkpoint);
             }
-
+            catch (OperationCanceledException) when (producerCancellation.IsCancellationRequested) { }
         }
     }
 
-    private static void ApplySnapshot(
-        Dictionary<string, AppSnapshot> currentByApp,
-        DateTimeOffset observedAtUtc,
-        string source,
-        Dictionary<string, AppInterval> intervalsByApp,
-        IAppEventWriter eventWriter)
+    // Keep the OS adapter separate so failures and time boundaries can be tested.
+    internal static async Task RunLoopAsync(ChannelReader<CollectReason> signals,
+        CancellationToken cancellationToken, IAppEventWriter writer, CollectorSettings settings,
+        Func<Dictionary<string, AppSnapshot>> capture, TimeProvider? clock = null,
+        Func<bool>? scanRequested = null)
     {
-        foreach ((string appKey, AppSnapshot current) in currentByApp)
+        clock ??= TimeProvider.System;
+        var tracker = new AppIntervalTracker(writer);
+        DateTimeOffset lastCheckpoint = clock.GetUtcNow();
+        DateTimeOffset lastScan = DateTimeOffset.MinValue;
+        DateTimeOffset lastObserved = lastCheckpoint;
+        try
         {
-            if (!intervalsByApp.TryGetValue(appKey, out AppInterval existing))
+            await foreach (CollectReason reason in signals.ReadAllAsync(cancellationToken))
             {
-                intervalsByApp[appKey] = new AppInterval(
-                    StateStartUtc: observedAtUtc,
-                    StateEndUtc: observedAtUtc,
-                    ExeName: current.ExeName,
-                    Pid: current.Pid,
-                    Hwnd: current.Hwnd,
-                    Title: current.Title,
-                    State: current.State);
-                continue;
-            }
-
-            if (string.Equals(existing.State, current.State, StringComparison.Ordinal))
-            {
-                intervalsByApp[appKey] = existing with
+                DateTimeOffset now = clock.GetUtcNow();
+                bool needsScan = scanRequested?.Invoke() ?? false;
+                if (needsScan || reason != CollectReason.Checkpoint ||
+                    now - lastScan >= TimeSpan.FromSeconds(settings.RescanIntervalSeconds))
                 {
-                    StateEndUtc = observedAtUtc,
-                    Pid = current.Pid,
-                    Hwnd = current.Hwnd,
-                    Title = current.Title
-                };
-                continue;
+                    tracker.ApplySnapshot(capture(), now, reason == CollectReason.Checkpoint ? "rescan" : "win_event");
+                    lastScan = now;
+                }
+                lastObserved = now;
+                if (now - lastCheckpoint >= TimeSpan.FromSeconds(settings.CheckpointIntervalSeconds))
+                {
+                    tracker.Checkpoint(now, "checkpoint");
+                    lastCheckpoint = now;
+                }
             }
-
-            AppInterval closedInterval = existing with { StateEndUtc = observedAtUtc };
-            WriteClosedInterval(eventWriter, closedInterval, source);
-
-            intervalsByApp[appKey] = new AppInterval(
-                StateStartUtc: observedAtUtc,
-                StateEndUtc: observedAtUtc,
-                ExeName: current.ExeName,
-                Pid: current.Pid,
-                Hwnd: current.Hwnd,
-                Title: current.Title,
-                State: current.State);
         }
-
-        foreach (string removedKey in intervalsByApp.Keys.Except(currentByApp.Keys).ToList())
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        finally
         {
-            AppInterval closedInterval = intervalsByApp[removedKey] with { StateEndUtc = observedAtUtc };
-            WriteClosedInterval(eventWriter, closedInterval, source);
-            intervalsByApp.Remove(removedKey);
+            // Never extend a failed capture into unobserved time.
+            tracker.Checkpoint(lastObserved, "shutdown", close: true);
         }
-    }
-
-    private static void WriteClosedInterval(IAppEventWriter eventWriter, AppInterval interval, string source)
-    {
-        if (interval.StateEndUtc < interval.StateStartUtc)
-        {
-            return;
-        }
-
-        var appEvent = new AppEvent(
-            StateStartUtc: interval.StateStartUtc,
-            StateEndUtc: interval.StateEndUtc,
-            ExeName: interval.ExeName,
-            Pid: interval.Pid,
-            Hwnd: interval.Hwnd,
-            Title: interval.Title,
-            State: interval.State,
-            Source: source);
-
-        eventWriter.Write(appEvent);
-        Console.WriteLine(JsonSerializer.Serialize(appEvent));
     }
 }

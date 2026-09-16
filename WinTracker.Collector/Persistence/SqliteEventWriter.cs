@@ -90,6 +90,12 @@ internal sealed class SqliteEventWriter : IAppEventWriter
         }
     }
 
+    public void Flush()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        FlushBuffer();
+    }
+
     private static void InitializeSchema(SqliteConnection connection)
     {
         using var command = connection.CreateCommand();

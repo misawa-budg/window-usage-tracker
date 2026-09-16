@@ -1,5 +1,6 @@
 {
   "rescanIntervalSeconds": 300,
+  "checkpointIntervalSeconds": 15,
   "sqliteFilePath": "data/collector.db",
   "excludedExeNames": [
     "dwm.exe",

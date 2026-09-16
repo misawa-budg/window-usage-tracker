@@ -50,6 +50,7 @@ internal static class CollectorSettingsLoader
             {
                 PollingIntervalSeconds = parsed.PollingIntervalSeconds,
                 RescanIntervalSeconds = rescanInterval,
+                CheckpointIntervalSeconds = Math.Clamp(parsed.CheckpointIntervalSeconds, 1, 300),
                 SqliteFilePath = sqliteFilePath,
                 ExcludedExeNames = excludedExeNames
             };
