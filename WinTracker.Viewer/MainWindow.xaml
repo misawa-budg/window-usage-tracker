@@ -263,6 +263,9 @@
                                             HorizontalContentAlignment="Stretch"
                                             IsTabStop="False"
                                             SelectionMode="None">
+                                            <ListView.ItemContainerTransitions>
+                                                <TransitionCollection />
+                                            </ListView.ItemContainerTransitions>
                                             <ListView.ItemTemplate>
                                                 <DataTemplate x:DataType="local:StateStackRowViewModel">
                                                     <Border
@@ -290,40 +293,7 @@
                                                                 Background="{ThemeResource BrushRail}"
                                                                 CornerRadius="{StaticResource RadiusPill}">
                                                                 <Viewbox Stretch="Fill" StretchDirection="Both">
-                                                                    <Grid Width="960" Height="50">
-                                                                        <ItemsControl ItemsSource="{x:Bind Columns}" UseLayoutRounding="False">
-                                                                            <ItemsControl.ItemsPanel>
-                                                                                <ItemsPanelTemplate>
-                                                                                    <StackPanel Orientation="Horizontal" />
-                                                                                </ItemsPanelTemplate>
-                                                                            </ItemsControl.ItemsPanel>
-                                                                            <ItemsControl.ItemTemplate>
-                                                                                <DataTemplate x:DataType="local:StackedColumnViewModel">
-                                                                                    <Grid Width="{x:Bind Width}" Height="46">
-                                                                                        <ItemsControl ItemsSource="{x:Bind Entries}">
-                                                                                            <ItemsControl.ItemsPanel>
-                                                                                                <ItemsPanelTemplate>
-                                                                                                    <StackPanel Orientation="Vertical" />
-                                                                                                </ItemsPanelTemplate>
-                                                                                            </ItemsControl.ItemsPanel>
-                                                                                            <ItemsControl.ItemTemplate>
-                                                                                                <DataTemplate x:DataType="local:StackedEntryViewModel">
-                                                                                                    <Border
-                                                                                                        Height="{x:Bind Height}"
-                                                                                                        Background="{x:Bind Fill}"
-                                                                                                        CornerRadius="{StaticResource RadiusSegment}">
-                                                                                                        <ToolTipService.ToolTip>
-                                                                                                            <TextBlock Text="{x:Bind Tooltip}" />
-                                                                                                        </ToolTipService.ToolTip>
-                                                                                                    </Border>
-                                                                                                </DataTemplate>
-                                                                                            </ItemsControl.ItemTemplate>
-                                                                                        </ItemsControl>
-                                                                                    </Grid>
-                                                                                </DataTemplate>
-                                                                            </ItemsControl.ItemTemplate>
-                                                                        </ItemsControl>
-                                                                    </Grid>
+                                                                    <local:TimelineTrack Width="960" Height="50" Columns="{x:Bind Columns}" />
                                                                 </Viewbox>
                                                             </Border>
 
@@ -535,6 +505,9 @@
                                             HorizontalContentAlignment="Stretch"
                                             IsTabStop="False"
                                             SelectionMode="None">
+                                            <ListView.ItemContainerTransitions>
+                                                <TransitionCollection />
+                                            </ListView.ItemContainerTransitions>
                                             <ListView.ItemTemplate>
                                                 <DataTemplate x:DataType="local:StateLaneViewModel">
                                                     <Border
