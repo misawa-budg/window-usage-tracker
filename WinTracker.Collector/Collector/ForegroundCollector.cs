@@ -20,12 +20,13 @@ internal static class ForegroundCollector
         hookPump.Start();
         _ = signals.Writer.TryWrite(CollectReason.Startup);
 
+        using var producerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using var rescanTimer = new PeriodicTimer(TimeSpan.FromSeconds(settings.RescanIntervalSeconds));
         Task rescanTask = Task.Run(async () =>
         {
             try
             {
-                while (await rescanTimer.WaitForNextTickAsync(cancellationToken))
+                while (await rescanTimer.WaitForNextTickAsync(producerCancellation.Token))
                 {
                     _ = signals.Writer.TryWrite(CollectReason.Rescan);
                 }
@@ -62,19 +63,16 @@ internal static class ForegroundCollector
         }
         finally
         {
+            // A capture/write exception must also stop the producer before awaiting it.
+            producerCancellation.Cancel();
+            await rescanTask;
+
             DateTimeOffset stoppedAtUtc = DateTimeOffset.UtcNow;
             foreach (AppInterval intervalState in intervalsByApp.Values)
             {
                 WriteClosedInterval(eventWriter, intervalState with { StateEndUtc = stoppedAtUtc }, "shutdown");
             }
 
-            try
-            {
-                await rescanTask;
-            }
-            catch (OperationCanceledException)
-            {
-            }
         }
     }
 
