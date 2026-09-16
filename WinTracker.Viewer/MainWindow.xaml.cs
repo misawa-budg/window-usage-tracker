@@ -193,7 +193,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            SetBusy(true, "Loading...");
+            SetBusy(true, "読み込み中…");
 
             _currentWindow = GetWindowFromSelection();
             UsageQueryWindow queryWindow = _currentWindow;
@@ -201,7 +201,7 @@ public sealed partial class MainWindow : Window
             if (!File.Exists(dbPath))
             {
                 ClearRows();
-                StatusTextBlock.Text = $"DB not found: {dbPath}";
+                StatusTextBlock.Text = $"記録データが見つかりません: {dbPath}";
                 return;
             }
 
@@ -237,7 +237,8 @@ public sealed partial class MainWindow : Window
             RebuildOverviewLegend();
             RebuildAppLegend();
 
-            StatusTextBlock.Text = $"{(DemoMode ? "DEMO / " : "")}Loaded: {GetRangeLabel()} / intervals={_stateIntervals.Count}";
+            StatusTextBlock.Text = $"{(DemoMode ? "DEMO · 合成データ / " : "")}更新 {DateTime.Now:HH:mm}";
+            ToolTipService.SetToolTip(StatusTextBlock, $"読み込んだ区間: {_stateIntervals.Count:N0}件");
             if (measurement is not null)
                 await measurement.CompleteAsync((FrameworkElement)Content, GetRangeLabel(), _stateIntervals.Count, token);
         }
@@ -247,7 +248,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            if (!_isClosed && ReferenceEquals(_reloadCts, reloadCts)) StatusTextBlock.Text = $"Error: {ex.Message}";
+            if (!_isClosed && ReferenceEquals(_reloadCts, reloadCts)) StatusTextBlock.Text = $"読み込みに失敗しました: {ex.Message}";
         }
         finally
         {
@@ -271,8 +272,8 @@ public sealed partial class MainWindow : Window
     private void UpdateCollectorStatus()
     {
         CollectorStatusTextBlock.Text = IsCollectorRunning()
-            ? "Collector: Process detected"
-            : "Collector: Stopped";
+            ? "Collector 起動中"
+            : "Collector 未検出";
     }
 
     private static bool IsCollectorRunning()
@@ -296,7 +297,7 @@ public sealed partial class MainWindow : Window
     private void SetOverviewMode(bool isDaily24h)
     {
         OverviewDailyPanel.Visibility = Visibility.Visible;
-        OverviewHeaderLabelTextBlock.Text = isDaily24h ? "State" : "Date";
+        OverviewHeaderLabelTextBlock.Text = isDaily24h ? "状態" : "日付";
 
         _overviewDailyRows.Clear();
     }
@@ -307,7 +308,7 @@ public sealed partial class MainWindow : Window
         AppLabelTextBlock.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
         AppComboBox.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
         AppDailyPanel.Visibility = Visibility.Visible;
-        AppHeaderLabelTextBlock.Text = isDaily24h ? "App" : "Date";
+        AppHeaderLabelTextBlock.Text = isDaily24h ? "アプリ" : "日付";
 
         _appDailyLanes.Clear();
     }
@@ -318,12 +319,12 @@ public sealed partial class MainWindow : Window
             : CreateLocalDay24hWindow();
 
     private string GetRangeLabel() =>
-        (RangeComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString() == "1week" ? "1week" : "24h";
+        (RangeComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() == "1week" ? "1week" : "24h";
 
     private AppDisplayMode GetAppDisplayMode()
     {
-        string? mode = (AppDisplayModeComboBox.SelectedItem as ComboBoxItem)?.Content?.ToString();
-        return string.Equals(mode, "State詳細", StringComparison.Ordinal)
+        string? mode = (AppDisplayModeComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString();
+        return string.Equals(mode, "StateDetails", StringComparison.Ordinal)
             ? AppDisplayMode.StateDetails
             : AppDisplayMode.Running;
     }
@@ -383,7 +384,7 @@ public sealed partial class MainWindow : Window
         foreach (StateStackRowLayout row in rows)
         {
             _overviewDailyRows.Add(new StateStackRowViewModel(
-                row.Label,
+                row.Label == "Active" ? "最前面" : row.Label,
                 row.TotalLabel,
                 row.Columns.Select(column =>
                     new StackedColumnViewModel(
@@ -454,7 +455,7 @@ public sealed partial class MainWindow : Window
         {
             _overviewLegendItems.Add(new LegendItemViewModel(
                 CreateBrush(item.ColorHex),
-                AppChoice.FormatDisplayName(item.Label)));
+                item.Label == TimelineLayoutBuilder.OtherLabel ? "その他" : AppChoice.FormatDisplayName(item.Label)));
         }
     }
 

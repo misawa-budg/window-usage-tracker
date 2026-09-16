@@ -91,8 +91,8 @@
                                 MinHeight="40"
                                 SelectedIndex="0"
                                 SelectionChanged="OnRangeSelectionChanged">
-                                <ComboBoxItem Content="24h" />
-                                <ComboBoxItem Content="1week" />
+                                <ComboBoxItem Content="今日" Tag="24h" />
+                                <ComboBoxItem Content="直近7日" Tag="1week" />
                             </ComboBox>
                             <Button
                                 x:Name="RefreshButton"
@@ -131,7 +131,7 @@
                                     FontSize="14"
                                     FontWeight="SemiBold"
                                     Foreground="{ThemeResource BrushTextPrimary}"
-                                    Text="一覧タイムライン（最前面対象）" />
+                                    Text="最前面アプリの推移" />
                                 <Grid Margin="0,10,0,0">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
@@ -321,7 +321,7 @@
                                     FontSize="14"
                                     FontWeight="SemiBold"
                                     Foreground="{ThemeResource BrushTextPrimary}"
-                                    Text="アプリ別タイムライン" />
+                                    Text="アプリ別のウィンドウ記録" />
                                 <Grid Margin="0,10,0,0">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
@@ -397,8 +397,8 @@
                                                 MinHeight="40"
                                                 SelectedIndex="0"
                                                 SelectionChanged="OnAppDisplayModeSelectionChanged">
-                                                <ComboBoxItem Content="Running" />
-                                                <ComboBoxItem Content="State詳細" />
+                                                <ComboBoxItem Content="状態をまとめる" Tag="Running" />
+                                                <ComboBoxItem Content="状態別に見る" Tag="StateDetails" />
                                             </ComboBox>
                                             <TextBlock
                                                 x:Name="AppLabelTextBlock"

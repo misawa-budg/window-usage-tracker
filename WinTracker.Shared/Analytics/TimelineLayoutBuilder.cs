@@ -2,7 +2,7 @@ namespace WinTracker.Shared.Analytics;
 
 public sealed class TimelineLayoutBuilder
 {
-    public const string NoDataTooltip = "No data";
+    public const string NoDataTooltip = "記録なし";
     public const string OtherLabel = "Other";
     public const string OtherColorKey = "BrushPastelRed";
     private const double MinVisibleSeconds = 0.0;
@@ -67,9 +67,9 @@ public sealed class TimelineLayoutBuilder
     {
         return
         [
-            new LegendItemLayout("Active（濃）", ColorForAppState("legend", "Active")),
-            new LegendItemLayout("Open（中）", ColorForAppState("legend", "Open")),
-            new LegendItemLayout("Minimized（淡）", ColorForAppState("legend", "Minimized"))
+            new LegendItemLayout("最前面（濃）", ColorForAppState("legend", "Active")),
+            new LegendItemLayout("通常（中）", ColorForAppState("legend", "Open")),
+            new LegendItemLayout("最小化（淡）", ColorForAppState("legend", "Minimized"))
         ];
     }
 
@@ -77,7 +77,7 @@ public sealed class TimelineLayoutBuilder
     {
         return
         [
-            new LegendItemLayout("Running（状態を統合表示）", "BrushTextSecondary")
+            new LegendItemLayout("最前面・通常・最小化をまとめた時間", "BrushTextSecondary")
         ];
     }
 
