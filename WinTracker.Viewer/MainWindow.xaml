@@ -189,9 +189,6 @@
                     <TextBlock
                         Text="最前面アプリの推移"
                         Style="{StaticResource SectionHeading}" />
-                    <TextBlock
-                        Text="前面にあったアプリを色分けしています。作業・集中時間を表すものではありません。"
-                        Style="{StaticResource Caption}" />
                     <ItemsControl
                         x:Name="OverviewLegendItemsControl"
                         ItemTemplate="{StaticResource LegendTemplate}">
@@ -285,9 +282,6 @@
                     <TextBlock
                         Text="アプリ別のウィンドウ記録"
                         Style="{StaticResource SectionHeading}" />
-                    <TextBlock
-                        Text="観測したウィンドウの記録です。複数アプリの時間は重なります。"
-                        Style="{StaticResource Caption}" />
                     <StackPanel
                         x:Name="AppSelectorCard"
                         Orientation="Horizontal"
@@ -447,9 +441,6 @@
                         </ItemsControl>
                     </StackPanel>
                 </StackPanel>
-                <TextBlock
-                    Text="空白は記録がない区間です。アプリを使っていなかったとは限りません。"
-                    Style="{StaticResource Caption}" />
             </StackPanel>
         </ScrollViewer>
     </Grid>

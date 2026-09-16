@@ -131,6 +131,12 @@ Desktopの実DB（約41.2 MiB）をReadOnlyで参照。2026-09-10〜09-16の7日
 
 ## その他の仕様の根拠
 
+### 表示注釈の削除（2026-09-16）
+
+- ユーザー指示で上段の説明・下段の説明・最下部の欠測注釈を画面から削除。状態の意味と測定の限界はarchitecture/interview-notesに残す。見出し・凡例・集計ロジックは変更していない。
+- Viewerテスト36件成功、Release/self-containedビルドは警告0・エラー0。今回の変更版は `artifacts/annotation-cleanup-20260916/viewer`。同じフォルダの `Run-Viewer-With-Desktop-Data.cmd` は既存のDesktopデータでViewerのみを開く。起動中のViewer・Desktop配布版は差し替えておらず、削除後の実画面は未確認。
+- セクションの枠・背景色は検討のみ。Carbonの[背景階層の実例](https://carbondesignsystem.com/elements/color/usage/)とGrafanaの[パネル実例](https://grafana.com/docs/grafana/latest/visualizations/panels-visualizations/panel-editor-overview/)をブラウザで確認。現状のDarkはページ背景#202020、帯の背景#1F1F1Fとほぼ同色で、描画領域の境界が見えにくい。セクション単位の薄い境界と背景明度差を次の比較候補とする。
+
 - [Windows console HandlerRoutine](https://learn.microsoft.com/en-us/windows/console/handlerroutine)
 - [SetConsoleCtrlHandlerのログオフ/シャットダウン制約](https://learn.microsoft.com/en-us/windows/console/setconsolectrlhandler)
 - [GetUserObjectInformation / UOI_IO](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getuserobjectinformationw)
