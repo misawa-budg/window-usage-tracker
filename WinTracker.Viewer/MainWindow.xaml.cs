@@ -4,12 +4,9 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Media.Animation;
 using WinTracker.Shared.Analytics;
 using WinTracker.Shared.Configuration;
-using Windows.Foundation;
 using Windows.Graphics;
 
 namespace WinTracker.Viewer;
@@ -22,7 +19,6 @@ public sealed partial class MainWindow : Window
         StateDetails
     }
 
-    private const double BucketTrackWidth = 760.0;
     private const double DailyTrackWidth = 960.0;
     private const int TopAppCount = 8;
     private static readonly bool DemoMode = Environment.GetCommandLineArgs().Contains("--demo", StringComparer.OrdinalIgnoreCase);
@@ -30,15 +26,11 @@ public sealed partial class MainWindow : Window
     private const int MinWindowWidth = 1100;
     private const int MinWindowHeight = 700;
     private const int CompactTickSwitchWidth = 1360;
-    private const double TickOffsetBase = 100.0;
-    private const double TickOffsetMax = 100.0;
     private static readonly SolidColorBrush TransparentBrush =
         new(Windows.UI.Color.FromArgb(0, 0, 0, 0));
 
-    private readonly ObservableCollection<TimelineRowViewModel> _overviewRows = [];
     private readonly ObservableCollection<StateStackRowViewModel> _overviewDailyRows = [];
     private readonly ObservableCollection<StateLaneViewModel> _appDailyLanes = [];
-    private readonly ObservableCollection<TimelineRowViewModel> _appRows = [];
     private readonly ObservableCollection<AppChoice> _appNames = [];
     private readonly ObservableCollection<LegendItemViewModel> _overviewLegendItems = [];
     private readonly ObservableCollection<LegendItemViewModel> _appLegendItems = [];
@@ -62,10 +54,8 @@ public sealed partial class MainWindow : Window
         ConfigureWindowSizing();
         UpdateTimeTickLabels();
 
-        OverviewListView.ItemsSource = _overviewRows;
         OverviewDailyListView.ItemsSource = _overviewDailyRows;
         AppDailyListView.ItemsSource = _appDailyLanes;
-        AppTimelineListView.ItemsSource = _appRows;
         AppComboBox.ItemsSource = _appNames;
         OverviewLegendItemsControl.ItemsSource = _overviewLegendItems;
         AppLegendItemsControl.ItemsSource = _appLegendItems;
@@ -126,20 +116,15 @@ public sealed partial class MainWindow : Window
         bool compact = AppWindow.Size.Width < CompactTickSwitchWidth;
         SetTickTexts(Tick00TextBlock, Tick06TextBlock, Tick12TextBlock, Tick18TextBlock, Tick24TextBlock, compact);
         SetTickTexts(AppTick00TextBlock, AppTick06TextBlock, AppTick12TextBlock, AppTick18TextBlock, AppTick24TextBlock, compact);
-        SetTickTexts(WeekTick00TextBlock, WeekTick06TextBlock, WeekTick12TextBlock, WeekTick18TextBlock, WeekTick24TextBlock, compact);
-        SetTickTexts(AppWeekTick00TextBlock, AppWeekTick06TextBlock, AppWeekTick12TextBlock, AppWeekTick18TextBlock, AppWeekTick24TextBlock, compact);
 
         UpdateTickOffsets();
     }
 
     private void UpdateTickOffsets()
     {
-        double extra = Math.Max(0, AppWindow.Size.Width - MinWindowWidth);
-        double offset = Math.Min(TickOffsetMax, TickOffsetBase + (extra / 120.0));
+        const double offset = 100.0;
         SetTickOffsets(Tick06TextBlock, Tick18TextBlock, offset);
         SetTickOffsets(AppTick06TextBlock, AppTick18TextBlock, offset);
-        SetTickOffsets(WeekTick06TextBlock, WeekTick18TextBlock, offset);
-        SetTickOffsets(AppWeekTick06TextBlock, AppWeekTick18TextBlock, offset);
     }
 
     private static void SetTickTexts(
@@ -311,11 +296,8 @@ public sealed partial class MainWindow : Window
     private void SetOverviewMode(bool isDaily24h)
     {
         OverviewDailyPanel.Visibility = Visibility.Visible;
-        OverviewWeekHeader.Visibility = Visibility.Collapsed;
-        OverviewListView.Visibility = Visibility.Collapsed;
         OverviewHeaderLabelTextBlock.Text = isDaily24h ? "State" : "Date";
 
-        _overviewRows.Clear();
         _overviewDailyRows.Clear();
     }
 
@@ -325,11 +307,8 @@ public sealed partial class MainWindow : Window
         AppLabelTextBlock.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
         AppComboBox.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
         AppDailyPanel.Visibility = Visibility.Visible;
-        AppWeekHeader.Visibility = Visibility.Collapsed;
-        AppTimelineListView.Visibility = Visibility.Collapsed;
         AppHeaderLabelTextBlock.Text = isDaily24h ? "App" : "Date";
 
-        _appRows.Clear();
         _appDailyLanes.Clear();
     }
 
@@ -540,12 +519,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private static TimelineSegmentViewModel ToTimelineSegmentViewModel(SegmentLayout segment)
-    {
-        Brush fill = segment.IsNoData ? TransparentBrush : CreateBrush(segment.ColorHex);
-        return new TimelineSegmentViewModel(segment.Width, fill, segment.Tooltip);
-    }
-
     private static AbsoluteSegmentViewModel ToAbsoluteSegmentViewModel(SegmentLayout segment)
     {
         Brush fill = segment.IsNoData ? TransparentBrush : CreateBrush(segment.ColorHex);
@@ -588,10 +561,8 @@ public sealed partial class MainWindow : Window
     {
         _activeIntervals = [];
         _stateIntervals = [];
-        _overviewRows.Clear();
         _overviewDailyRows.Clear();
         _appDailyLanes.Clear();
-        _appRows.Clear();
         _appNames.Clear();
         _overviewLegendItems.Clear();
         _appLegendItems.Clear();
@@ -637,69 +608,5 @@ public sealed partial class MainWindow : Window
 
         RebuildAppNames();
         BuildWeeklyAppRows();
-    }
-
-
-
-    private void OnCardPointerEntered(object sender, PointerRoutedEventArgs e) =>
-        AnimateInteractive(sender as FrameworkElement, scale: 1.02, opacity: 1.0, durationMs: 140);
-
-    private void OnCardPointerExited(object sender, PointerRoutedEventArgs e) =>
-        AnimateInteractive(sender as FrameworkElement, scale: 1.00, opacity: 1.0, durationMs: 160);
-
-    private void OnCardPointerPressed(object sender, PointerRoutedEventArgs e) =>
-        AnimateInteractive(sender as FrameworkElement, scale: 0.995, opacity: 0.96, durationMs: 70);
-
-    private void OnCardPointerReleased(object sender, PointerRoutedEventArgs e) =>
-        AnimateInteractive(sender as FrameworkElement, scale: 1.02, opacity: 1.0, durationMs: 90);
-
-    private static void AnimateInteractive(FrameworkElement? element, double scale, double opacity, int durationMs)
-    {
-        if (element is null)
-        {
-            return;
-        }
-
-        if (element.RenderTransform is not ScaleTransform transform)
-        {
-            transform = new ScaleTransform { ScaleX = 1.0, ScaleY = 1.0 };
-            element.RenderTransform = transform;
-            element.RenderTransformOrigin = new Point(0.5, 0.5);
-        }
-
-        var storyboard = new Storyboard();
-        var duration = TimeSpan.FromMilliseconds(durationMs);
-
-        var scaleX = new DoubleAnimation
-        {
-            To = scale,
-            Duration = duration,
-            EnableDependentAnimation = true
-        };
-        Storyboard.SetTarget(scaleX, transform);
-        Storyboard.SetTargetProperty(scaleX, "ScaleX");
-
-        var scaleY = new DoubleAnimation
-        {
-            To = scale,
-            Duration = duration,
-            EnableDependentAnimation = true
-        };
-        Storyboard.SetTarget(scaleY, transform);
-        Storyboard.SetTargetProperty(scaleY, "ScaleY");
-
-        var fade = new DoubleAnimation
-        {
-            To = opacity,
-            Duration = duration,
-            EnableDependentAnimation = true
-        };
-        Storyboard.SetTarget(fade, element);
-        Storyboard.SetTargetProperty(fade, "Opacity");
-
-        storyboard.Children.Add(scaleX);
-        storyboard.Children.Add(scaleY);
-        storyboard.Children.Add(fade);
-        storyboard.Begin();
     }
 }
