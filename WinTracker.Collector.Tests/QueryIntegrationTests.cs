@@ -19,15 +19,14 @@ public sealed class QueryIntegrationTests
             Assert.Single(collector.QueryAppSummaries(window));
             Assert.Single(collector.QueryStateTotals(window));
             Assert.All(collector.QueryTimeline(window), row => Assert.Equal("real.exe", row.ExeName));
-            Assert.Single(viewer.QueryActiveIntervals(window));
             Assert.Single(viewer.QueryStateIntervals(window));
-            Assert.All(viewer.QueryTimeline(window), row => Assert.Equal("real.exe", row.ExeName));
+            Assert.Equal("real.exe", viewer.QueryStateIntervals(window)[0].ExeName);
             Assert.Equal(2, demo.QueryStateIntervals(window).Count);
         });
     }
 
     [Fact]
-    public void LastPartialBucketIsClippedInBothQueryServices()
+    public void ReportBucketsAndViewerIntervalsAreClippedToTheQueryWindow()
     {
         WithDatabase((path, start) =>
         {
@@ -35,8 +34,10 @@ public sealed class QueryIntegrationTests
             using var collector = new SqliteUsageQueryService(path);
             using var viewer = new SqliteTimelineQueryService(path);
             Assert.Equal(5400, collector.QueryTimeline(window).Sum(row => row.Seconds));
-            Assert.Equal(5400, viewer.QueryTimeline(window).Sum(row => row.Seconds));
-            Assert.Throws<ArgumentOutOfRangeException>(() => viewer.QueryTimeline(window with { BucketSize = TimeSpan.Zero }));
+            var interval = Assert.Single(viewer.QueryStateIntervals(window));
+            Assert.Equal(start, interval.StateStartUtc);
+            Assert.Equal(window.ToUtc, interval.StateEndUtc);
+            Assert.Throws<ArgumentOutOfRangeException>(() => viewer.QueryStateIntervals(window with { BucketSize = TimeSpan.Zero }));
             Assert.Throws<ArgumentException>(() => collector.QueryTimeline(window with { ToUtc = start }));
         });
     }
