@@ -429,28 +429,38 @@ public sealed partial class MainWindow : Window
 
     private void RebuildAppNames()
     {
-        string? current = (AppComboBox.SelectedItem as AppChoice)?.ExeName;
-        IReadOnlyList<string> appNames = _layoutBuilder.BuildAppNames(_stateIntervals);
-
-        _appNames.Clear();
-        foreach (string app in appNames)
+        // Replacing ItemsSource/selection raises SelectionChanged synchronously. The caller
+        // already builds the selected app once, so do not rebuild during list population.
+        AppComboBox.SelectionChanged -= OnAppSelectionChanged;
+        try
         {
-            _appNames.Add(new AppChoice(app));
-        }
+            string? current = (AppComboBox.SelectedItem as AppChoice)?.ExeName;
+            IReadOnlyList<string> appNames = _layoutBuilder.BuildAppNames(_stateIntervals);
 
-        if (_appNames.Count == 0)
+            _appNames.Clear();
+            foreach (string app in appNames)
+            {
+                _appNames.Add(new AppChoice(app));
+            }
+
+            if (_appNames.Count == 0)
+            {
+                AppComboBox.SelectedItem = null;
+                return;
+            }
+
+            if (current is not null && _appNames.Any(x => string.Equals(x.ExeName, current, StringComparison.OrdinalIgnoreCase)))
+            {
+                AppComboBox.SelectedItem = _appNames.First(x => string.Equals(x.ExeName, current, StringComparison.OrdinalIgnoreCase));
+                return;
+            }
+
+            AppComboBox.SelectedIndex = 0;
+        }
+        finally
         {
-            AppComboBox.SelectedItem = null;
-            return;
+            AppComboBox.SelectionChanged += OnAppSelectionChanged;
         }
-
-        if (current is not null && _appNames.Any(x => string.Equals(x.ExeName, current, StringComparison.OrdinalIgnoreCase)))
-        {
-            AppComboBox.SelectedItem = _appNames.First(x => string.Equals(x.ExeName, current, StringComparison.OrdinalIgnoreCase));
-            return;
-        }
-
-        AppComboBox.SelectedIndex = 0;
     }
 
     private void RebuildOverviewLegend()
