@@ -73,7 +73,13 @@ internal sealed class SqliteEventWriter : IAppEventWriter
         _buffer.Add(_storeWindowTitles ? appEvent : appEvent with { Title = string.Empty });
         if (_buffer.Count >= BatchSize)
         {
-            FlushBuffer();
+            try { FlushBuffer(); }
+            catch
+            {
+                // Write failed: this event was not accepted. Retrying must not duplicate it.
+                _buffer.RemoveAt(_buffer.Count - 1);
+                throw;
+            }
         }
     }
 

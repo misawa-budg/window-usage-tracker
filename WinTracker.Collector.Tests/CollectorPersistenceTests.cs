@@ -84,6 +84,31 @@ public sealed class CollectorPersistenceTests
         finally { SqliteConnection.ClearAllPools(); File.Delete(path); }
     }
 
+    [Fact]
+    public void FailedAutomaticFlushDoesNotDuplicateTheRetriedEvent()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"wintracker-failure-{Guid.NewGuid():N}.db");
+        try
+        {
+            using var writer = new SqliteEventWriter(path);
+            using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path }.ToString());
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "CREATE TRIGGER fail_insert BEFORE INSERT ON app_events BEGIN SELECT RAISE(ABORT, 'synthetic write failure'); END;";
+            command.ExecuteNonQuery();
+            var appEvent = new AppEvent(Start, Start.AddSeconds(1), "test.exe", 1, "0x1", "", "Active", "test");
+            for (int index = 0; index < 29; index++) writer.Write(appEvent);
+            Assert.Throws<SqliteException>(() => writer.Write(appEvent));
+            command.CommandText = "DROP TRIGGER fail_insert";
+            command.ExecuteNonQuery();
+            writer.Write(appEvent);
+            writer.Flush();
+            command.CommandText = "SELECT COUNT(*) FROM app_events";
+            Assert.Equal(30L, command.ExecuteScalar());
+        }
+        finally { SqliteConnection.ClearAllPools(); File.Delete(path); }
+    }
+
     internal static Dictionary<string, AppSnapshot> Snapshot(string state) => new(StringComparer.OrdinalIgnoreCase)
     {
         ["editor.exe"] = new AppSnapshot("editor.exe", 1, "0x1", "test", state)
