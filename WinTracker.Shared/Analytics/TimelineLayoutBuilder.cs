@@ -8,7 +8,7 @@ public sealed class TimelineLayoutBuilder
     public const string ActiveColorKey = "BrushStateActive";
     public const string OpenColorKey = "BrushStateOpen";
     public const string MinimizedColorKey = "BrushStateMinimized";
-    private const double MinVisibleSeconds = 300.0;
+    private const double MinVisibleSeconds = 0.0;
     private const string OverviewState = "Active";
 
     private static readonly string[] AppStates = ["Active", "Open", "Minimized"];
@@ -522,7 +522,6 @@ public sealed class TimelineLayoutBuilder
         HashSet<string> visibleApps = BuildVisibleAppSet(intervals, MinVisibleSeconds);
         IReadOnlyList<string> appNames = BuildAppNames(intervals)
             .Where(visibleApps.Contains)
-            .Take(_topAppCount)
             .ToList();
 
         var rows = new List<StateLaneLayout>(appNames.Count);
@@ -738,6 +737,10 @@ public sealed class TimelineLayoutBuilder
         List<ActiveIntervalRow> visibleIntervals = clipped
             .Where(x => visibleApps.Contains(x.ExeName))
             .ToList();
+        HashSet<string> namedApps = BuildOverviewLegend(activeIntervals)
+            .Where(x => x.Label != OtherLabel)
+            .Select(x => x.Label)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var boundaries = new List<DateTimeOffset>(visibleIntervals.Count * 2 + 2)
         {
@@ -786,7 +789,8 @@ public sealed class TimelineLayoutBuilder
             totalSeconds += sliceSeconds;
             accumulator.AddData(
                 sliceWidth,
-                [new AppUsage(topInterval.ExeName, sliceSeconds, ColorForKey(topInterval.ExeName))],
+                [new AppUsage(topInterval.ExeName, sliceSeconds,
+                    namedApps.Contains(topInterval.ExeName) ? ColorForKey(topInterval.ExeName) : OtherColorKey)],
                 sliceStartUtc.ToLocalTime(),
                 sliceEndUtc.ToLocalTime());
         }
@@ -816,11 +820,8 @@ public sealed class TimelineLayoutBuilder
             }
 
             UsageQueryWindow dayWindow = new(dayStart, dayEnd, window.BucketSize);
-            List<ActiveIntervalRow> dayIntervals = activeIntervals
-                .Where(x => x.StateEndUtc > dayStart && x.StateStartUtc < dayEnd)
-                .ToList();
-
-            StateStackRowLayout active = BuildDailyStateStackRowsFromIntervals(dayIntervals, dayWindow, trackWidth)[0];
+            // Use the whole selected period for the legend mapping, then clip inside the daily builder.
+            StateStackRowLayout active = BuildDailyStateStackRowsFromIntervals(activeIntervals, dayWindow, trackWidth)[0];
             rows.Add(new StateStackRowLayout(
                 $"{dayStart.ToLocalTime():MM/dd (ddd)}",
                 active.TotalLabel,
