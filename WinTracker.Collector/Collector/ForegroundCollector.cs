@@ -26,7 +26,8 @@ internal static class ForegroundCollector
         {
             await RunLoopAsync(signals.Reader, cancellationToken, eventWriter, settings,
                 () => WindowSnapshotProvider.CaptureCurrentStates(excluded),
-                scanRequested: () => Interlocked.Exchange(ref captureRequested, 0) != 0);
+                scanRequested: () => Interlocked.Exchange(ref captureRequested, 0) != 0,
+                sessionAvailable: SessionAvailability.IsInputDesktop);
         }
         finally
         {
@@ -49,7 +50,7 @@ internal static class ForegroundCollector
     internal static async Task RunLoopAsync(ChannelReader<CollectReason> signals,
         CancellationToken cancellationToken, IAppEventWriter writer, CollectorSettings settings,
         Func<Dictionary<string, AppSnapshot>> capture, TimeProvider? clock = null,
-        Func<bool>? scanRequested = null)
+        Func<bool>? scanRequested = null, Func<bool>? sessionAvailable = null)
     {
         clock ??= TimeProvider.System;
         var tracker = new AppIntervalTracker(writer);
@@ -61,6 +62,22 @@ internal static class ForegroundCollector
             await foreach (CollectReason reason in signals.ReadAllAsync(cancellationToken))
             {
                 DateTimeOffset now = clock.GetUtcNow();
+                // Do not bridge sleep, long stalls, or backwards wall-clock adjustments.
+                bool clockWentBackwards = now < lastObserved;
+                if (clockWentBackwards || now - lastObserved > TimeSpan.FromSeconds(settings.CheckpointIntervalSeconds * 2))
+                {
+                    tracker.Checkpoint(lastObserved, "observation_gap", close: true);
+                    lastScan = DateTimeOffset.MinValue;
+                    lastCheckpoint = now;
+                    if (clockWentBackwards) continue;
+                }
+                if (sessionAvailable is not null && !sessionAvailable())
+                {
+                    tracker.Checkpoint(lastObserved, "session_unavailable", close: true);
+                    lastScan = DateTimeOffset.MinValue;
+                    lastCheckpoint = lastObserved = now;
+                    continue;
+                }
                 bool needsScan = scanRequested?.Invoke() ?? false;
                 if (needsScan || reason != CollectReason.Checkpoint ||
                     now - lastScan >= TimeSpan.FromSeconds(settings.RescanIntervalSeconds))
