@@ -34,6 +34,13 @@ if (UsageReportConsole.TryHandle(args, settings, appRootPath, demoMode))
     return;
 }
 
+if (args.Any(arg => !string.Equals(arg, "--background", StringComparison.OrdinalIgnoreCase)))
+{
+    Console.Error.WriteLine("Usage: WinTracker.Collector [--background|--stop] | seed/report [24h|1week] [--demo]");
+    Environment.ExitCode = 2;
+    return;
+}
+
 using var singleInstanceMutex = new Mutex(
     initiallyOwned: true,
     name: @"Local\WinTrackerCollector",
