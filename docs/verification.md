@@ -53,7 +53,56 @@
 - 最新コードを `artifacts/viewer-update-20260916` にFD/SCで生成（ZIPなし）。今回の追加変更について実画面の操作試験・クリックから描画完了までの計測は行っていない。
 - ローカル検証用にSCバンドルへ `Run-Viewer-With-Desktop-Data.cmd` を追加。Desktopの設定を参照して新版Viewerだけを起動し、旧Collector・設定・DBを置換しない。これはこのPC専用のランチャーで、配布用ソースには含めない。
 
-## 仕様の根拠
+## Desktop実データでのUI計測と整理（2026-09-16、追加）
+
+### 条件と測定範囲
+
+Desktopの実DB（約41.2 MiB）をReadOnlyで参照。2026-09-10〜09-16の7日間、5,142区間で測定。Collectorは既存プロセスを継続し、DBの複製・書換え・VACUUM・インデックス追加はしていない。比較中の対象件数は同じだったが、稼働中DBなので完全に固定した入力ではない。
+
+変更前は `cdf19d3` 相当のViewerに任意計測だけを加えた `b31f01f`、変更後は `0d65f41`。いずれもRelease / win-x64 / self-contained、同じPC・同じウィンドウ寸法。起動直後の24hを除外し、1weekへの初回切替と更新ボタンによる再読込2回を測定。前→後の順なのでOS/DBキャッシュと実行順の影響は排除していない。
+
+`WINTRACKER_PROFILE_OUTPUT` を指定した場合だけ、`ReloadMeasurement` が時間・件数・visual tree要素数をJSON Linesへ出力する。通常起動時は無効。アプリ名・タイトル・DBパスは計測ログに含めない。明示した出力ファイルへ追記するため、計測後は環境変数を解除する。
+
+| 段階 | 変更前 1 / 2 / 3回目（ms） | 変更後 1 / 2 / 3回目（ms） |
+| --- | --- | --- |
+| 読込開始〜DB取得後のUI復帰 | 47.57 / 101.56 / 104.97 | 36.77 / 39.58 / 25.43 |
+| 区間計算・ViewModel・ItemsSource更新等 | 64.61 / 55.77 / 41.82 | 65.82 / 67.31 / 25.27 |
+| 強制UpdateLayout | 1,183.48 / 1,930.35 / 2,492.90 | 39.77 / 24.16 / 27.15 |
+| 開始〜最初のRenderingコールバック | 1,369.60 / 2,088.50 / 2,640.02 | 143.21 / 131.76 / 78.40 |
+| visual tree要素数 | 各28,561 | 各1,024 |
+
+主な残存ボトルネックはDB取得ではなくXAML生成・配置だった。前回のSQL最適化とは別のボトルネックであり、両者の改善倍率を単純合算しない。
+
+この値には画面の配置まで含むが、GPU present・ディスプレイ表示完了や入力イベント配送待ちは含まない。`UpdateLayout` を診断時だけ明示呼出ししており、自然なフレーム進行への影響もある。最初のコールバックはアニメーション終了も保証しない。そこで最終版では行追加のアニメーションを無効化し、直後と安定後の実画面も別に確認した。「厳密なクリックから表示完了まで」「全PCで常に0.1秒」とは主張しない。
+
+初回24hの参考値は、変更前543ms、変更後439ms。週の温まった状態より初回DB/ランタイム処理が大きい。これはプロセス起動全体の時間ではない。
+
+### 変更と検証
+
+- 一覧タイムラインの区間別の入れ子ItemsControlを、色ごとのPathとRectangleGeometryへ変更。時刻の小数座標・欠測・色・総時間を保ち、間引きは行わない。マウス位置の詳細検索は二分探索。
+- 常に非表示だった旧週UI、対応するViewModel・コレクション・変換、機能のないカード拡大アニメーションを削除（この整理だけで445行削除、3行追加）。区間計算の未参照privateメソッドとSharedPlaceholderも削除。削除したコードはGitから復元可能。
+- 通常Collectorのログは起動・停止・異常系が中心で、イベントごとの大量出力は現状ない。障害原因のログや明示的なreportコマンドの出力を、単に行数削減のため消してはいない。
+- 追加10ケースで詳細検索の半開区間・境界・ゼロ幅・空・非有限座標・nullを検証。Collector.Tests 23件 + Viewer.Tests 42件 = 65件成功。通常Releaseビルドは警告0・エラー0。
+- 実画面で24h/1week、週の更新、Running/State詳細切替、区間ツールチップ、Tabで行内へ移動後の右矢印による詳細表示を確認。行の縮小/拡大をなくしても時間と凡例が対応していることを確認。
+- 通常計測を無効化した起動口は、ローカル専用の `artifacts/week-optimized-20260916/Run-Viewer-With-Desktop-Data.cmd`。Desktop版そのものは上書きしない。
+
+### 静的解析の扱い
+
+標準Roslyn/.NET解析を利用。`dotnet format ... analyzers/style --verify-no-changes --diagnostics IDE0051 IDE0052 --severity info` の限定実行では指摘なし。そのため未使用判断は検索・XAML参照・ビルドも併用した。
+
+さらに `dotnet build ... -p:AnalysisLevel=latest-all -p:EnforceCodeStyleInBuild=true -p:ErrorLog=<local path>` を一時指定。ViewerとSharedの全規則ビルドでは54警告、0エラー。通常のビルド規則とは別で、全件解消済みではない。新規TrackHitTestのnull検証は追加済み。
+
+- CA2007: UI更新を続けるawaitに機械的なConfigureAwait(false)を入れない。
+- CA5392 / CS0169: パッケージ提供・XAML生成コードの箇所を識別し、生成物を直接編集しない。
+- CA1305: 保存時刻のParseのカルチャ明示は今後の修正候補。表示時刻のローカライズと保存形式の解析を分ける。
+- CA1031: 最上位UIのエラー表示と、汎用catchによる原因隠蔽を別に評価する。
+- APIの可視性、static化、命名規約、AOT助言は対象要件に照らして選ぶ。警告をゼロにするためだけの大規模改名やNuGet追加は行わない。
+
+長期間のヒープ/ネイティブメモリ増加、百万件級DB、別PC、実Collectorの運用試験は引き続き未検証。
+
+根拠: [WinUIのXAML配置最適化](https://learn.microsoft.com/en-us/windows/apps/develop/performance/optimize-xaml-layout)、[Renderingイベントと購読解除](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.media.compositiontarget.rendering?view=windows-app-sdk-1.7)。
+
+## その他の仕様の根拠
 
 - [Windows console HandlerRoutine](https://learn.microsoft.com/en-us/windows/console/handlerroutine)
 - [SetConsoleCtrlHandlerのログオフ/シャットダウン制約](https://learn.microsoft.com/en-us/windows/console/setconsolectrlhandler)
