@@ -39,7 +39,7 @@ Desktop版に対応するコミット `550b38f` のSQL・区間計算と、修�
 3. 長期DB容量・常駐CPU/メモリの計測、保存成功のheartbeat、保管期限、クリーンな別PCでの実行確認は残課題。
 4. 多ウィンドウの集約をActive > Open > Minimizedに統一した。「前面がなくても開いた対象ウィンドウがあればOpen」を意味する。新Collectorへの切替前の履歴は旧規則のまま。
 5. Active切替を完全な履歴として保証しない。イベントは再観測のきっかけで、連続通知はまとめる。見えない期間は利用時間に補完しない。
-6. 非表示の旧UIは追加修正で整理済み。Sharedの古いバケット系API、自動CI、DST移行日の23/25時間対応は追加改善の候補。面接前に全面改修する必要はない。
+6. 非表示の旧UIとSharedの旧バケット描画APIは整理済み。自動CI、DST移行日の23/25時間対応は追加改善の候補。面接前に全面改修する必要はない。
 
 追加のUI計測では5,142区間で、読込開始〜最初のRenderingコールバックが変更前1,370 / 2,089 / 2,640 ms、変更後143 / 132 / 78 ms。配置の負荷を削減し、visual treeは28,561から1,024要素になった。詳細・計測上の制約は [検証記録](verification.md#desktop実データでのui計測と整理2026-09-16追加) を参照。これは上の旧SQL比較とは別実験であり、最終表示完了や全PCの応答時間を保証する値ではない。
 
@@ -103,13 +103,34 @@ SQLの条件は `end > from AND start < to`。区間を半開区間 `[start, end
 | Collector / Viewerの分離 | GUIを閉じても記録継続。描画の問題を収集から切り離す | 保存先解決・停止制御・配布が少し複雑になる |
 | SQLite | ローカル完結、サーバー不要、トランザクションと期間検索を使える | JSONLは追記が単純だが期間検索・集計を自作する負担がある。クラウド同期や多数同時書込向けの設計ではない |
 | WinUI 3 / XAML | Windowsネイティブの見た目・標準操作部品で作りたい要件に合う | WPFも有力。WinUIは配布・ビルド依存が複雑で、大量のXAML部品生成は今回のように重くなる |
-| Sharedの純粋な区間計算 | OSやGUIを起動せず境界条件・重複をテストできる | Sharedに旧バケット系APIも残っており、責務整理は続けられる |
+| Sharedの純粋な区間計算 | OSやGUIを起動せず境界条件・重複をテストできる | 描画部品はViewer側。旧バケット描画APIは削除し現行区間方式に絞った |
 
 根拠: [SQLiteの用途](https://www.sqlite.org/whentouse.html)、[WinUI 3](https://learn.microsoft.com/en-us/windows/apps/winui/winui3/)。選択全体は個人用Windowsアプリとして妥当だが、「唯一の最適解」「WinUIだから必ず高速」とは言わない。.NETのターゲットはCollectorが10、Shared/Viewerが8であり、全体が.NET 10に統一済みという説明も不正確。
 
 面接では、例えば「最初は実現したい機能と見た目を決め、技術選定・実装にはLLMの提案を多く使いました。その後、状態の意味と欠測の扱い、保存失敗のテスト、週表示の性能を見直しています」と、自分が実際に確認できた範囲で説明する。計測や修正もLLM支援で進めたことを隠す必要はない。
 
-## 画面共有前に自分で確認すること
+## WPFへの変更を検討する場合
+
+2026-09-16時点では移行していない。C#を別言語にする話ではなく、ViewerのUIフレームワークを交換する話。WPFもWinUI 3もWindows用・XAML系だが、XAMLやコントロールのAPIは同一ではない。
+
+| 観点 | WPF | WinUI 3 | このプロジェクトでの判断 |
+| --- | --- | --- | --- |
+| 基盤 | .NETのWindows向けデスクトップUI | Windows App SDKのネイティブUI | CollectorとSQLiteはどちらでも使える |
+| 見た目 | .NET 9以降は組込みFluentテーマも利用可能 | Fluentの標準コントロールやWindows連携 | WPFでもモダンな見た目は可能。現在の見た目を完全再現する移植作業は必要 |
+| 開発時の画面編集 | Visual StudioのXAML Designerが使える | Designer非対応。Hot Reload・Live Visual Tree等で実行中に確認 | 自分で画面を学びながら編集するならWPFは候補 |
+| 配布・ビルド | Windows Desktop .NETを基盤に構成できる | Windows App SDKの実行依存も扱う | 現在のWinUI固有ビルド設定は移行時の削減候補。ただし実配布で要検証 |
+| グラフ性能 | DrawingVisual等の軽量描画を選べる | 今回のPath集約等で軽量化できる | WPFに替えるだけで高速化するわけではない。要素数と描画方式が重要 |
+| 移行コスト | Viewerの書換え・動作確認が必要 | 現行実装を継続利用できる | 面接前の全面移行を性能対策だけのために行う根拠は弱い |
+
+Microsoftは新規ネイティブアプリにWinUI 3を推奨しているが、それは既存のWPFを必ず書き換える意味でも、すべての個人プロジェクトで最適という意味でもない。[開発パスの公式案内](https://learn.microsoft.com/en-us/windows/apps/get-started/)
+
+WPFは古い.NET Framework専用ではなく現代の.NETでも開発されている。Fluentテーマは.NET 9で追加され、.NET 10でも改善されている。[WPF概要](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/overview/)、[.NET 10の更新](https://learn.microsoft.com/en-us/dotnet/desktop/wpf/whats-new/net100)。WinUIのデザイン時ツールの現状は [公式ツール説明](https://learn.microsoft.com/en-us/windows/apps/develop/ui/xaml-runtime-design-tools) を参照。
+
+このコードで再利用できるのはCollector、Sharedの区間計算・設定・テスト、SQLiteスキーマ、WinUI非依存のSQL取得処理。書き直すのはMainWindow/AppのXAMLと操作処理、`x:Bind`、`ThemeResource`、AppWindow/DispatcherQueue、WinUIのBrushやPath、計測用Renderingイベント等。単なるNuGet差し替えではない。
+
+検討を進めるなら、合成データで「1週間の一覧グラフ＋期間切替」だけをWPFで試作し、同条件で応答・配布サイズ・ビルド手順・本人の変更しやすさを比較する。移行するための追加抽象化を今のコード全体へ先回りして入れない。試作・移行は別途判断する。
+
+## 画面共有前の確認項目
 
 - AppIntervalTrackerの状態遷移とチェックポイント処理を追える。
 - WinEventHookPumpのコールバックを軽くする理由と、メッセージループ・デリゲート保持を説明できる。

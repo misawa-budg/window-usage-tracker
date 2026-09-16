@@ -102,6 +102,19 @@ Desktopの実DB（約41.2 MiB）をReadOnlyで参照。2026-09-10〜09-16の7日
 
 根拠: [WinUIのXAML配置最適化](https://learn.microsoft.com/en-us/windows/apps/develop/performance/optimize-xaml-layout)、[Renderingイベントと購読解除](https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.media.compositiontarget.rendering?view=windows-app-sdk-1.7)。
 
+## 状態規則の統一と3プロジェクトの整理（2026-09-16、追加）
+
+- ユーザー判断によりActive > Open > Minimizedへ統一。定義はSharedのAppStatePriorityに集約。Open/Minimizedの列挙順逆転、Active優先、全最小化、別アプリの独立性を検証し、同じケースのCollector集約とViewer重複解決が一致することを確認した。
+- 新Collectorで収集するデータから新規則を適用する。稼働中のDesktop Collector・既存DB・自動起動設定は変更していない。実運用に反映するには、停止・バックアップを含めてCollectorを新ビルドへ切り替える必要がある。過去の集約前ウィンドウ状態は復元できない。
+- Shared: 旧バケット描画APIと専用ヘルパー・モデルを削除。TimelineLayoutBuilderは約1,800行から837行に縮小。現在使う区間計算の本体は維持した。
+- Viewer: QueryTimeline/QueryActiveIntervalsは実画面から呼ばれないため削除。SQL取得クラスは82行になり、QueryStateIntervalsの1経路に絞った。SQLテストは現行APIへ移し、デモ除外・期間クリップ・入力検証を維持した。
+- Collector: AppIntervalの重複フィールドと読まれない終了時刻を廃止し、Tracker内部の開始時刻＋最新Snapshotへ整理。状態が同じ間は開始時刻・exe表記を保ち、PID/handle/titleのみ最新にする既存の挙動もテストした。
+- Collectorのreportで使う時間バケット集計は削除していない。停止制御・チェックポイント・イベントキュー・セッション判定・異常系テストも維持。NuGet追加やUIフレームワーク移行は行っていない。
+- 旧描画API専用17テストを外し、現行方式の色・幅・順序・欠測・競合に7テストを追加。状態統一とTrackerに9ケースを追加し、最終結果はCollector 32件＋Viewer 32件＝64件成功。前回65件から件数が減るのは、使われなくなった仕様のテストを撤去したため。
+- 固定seedの合成2,000区間で、現行のアプリ名・凡例・日/週の一覧・アプリ別モデルをJSON化して整理前後を比較。SHA-256は双方 `050C3EA9C33C56AF4600B9BC878216BA078A71CC95FA1ABE66F720650EA74F25` で一致。同一環境での回帰比較であり、時刻ラベルを含むため全タイムゾーン共通のgolden値ではない。
+- release.ps1でFD/SC両方を `artifacts/refactor-20260916` へ生成。Viewerは警告0・エラー0。Desktopへの差替え、今回の再UI操作・再性能計測・実Collector起動停止は未実施（今回XAML/描画コントロールは変更していない）。
+- 削除コードはGit履歴から復元可能。今後の整理は、UI依存の色変換、日境界/DST、日時解析のカルチャ、reportの集計契約など、要件とテストを確認して進める。行数だけを目標に、異常系や責務分離を削らない。
+
 ## その他の仕様の根拠
 
 - [Windows console HandlerRoutine](https://learn.microsoft.com/en-us/windows/console/handlerroutine)

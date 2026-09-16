@@ -16,6 +16,7 @@
   - 現在の主な内容:
     - 設定・保存先の解決（`Configuration/`）
     - 区間描画モデルと境界走査（`TimelineLayoutBuilder` / `IntervalSweep`）
+    - 状態優先度の共通規則（`AppStatePriority`: Active > Open > Minimized）
     - `UsageQueryWindow`
     - `TimelineUsageRow`
     - `AppStateUsageRow`
@@ -35,6 +36,7 @@
 ## 状態モデルの前提
 - `Active`: foreground window（同時刻に原則1ウィンドウ）
 - `Open / Minimized`: 複数アプリが同時に成立しうる
+- 同じexeの複数ウィンドウは `Active > Open > Minimized` で集約。Openが1つでも残れば、他が最小化されていてもOpenとする。
 
 ## 依存関係
 - `WinTracker.Collector -> WinTracker.Shared`
@@ -56,6 +58,20 @@
 - 共通分析モデル: `WinTracker.Shared/Analytics/`
 - Viewer 集計: `WinTracker.Viewer/SqliteTimelineQueryService.cs`
 - Viewer 画面: `WinTracker.Viewer/MainWindow.xaml`, `WinTracker.Viewer/MainWindow.xaml.cs`
+
+## 最初に追うコード（現行の1経路に絞る）
+
+| 知りたいこと | 読む順番 |
+| --- | --- |
+| いつ観測するか | WinEventHookPump → ForegroundCollector |
+| 何を1アプリとし、状態をどう決めるか | WindowSnapshotProvider → SharedのAppStatePriority |
+| いつからいつまでを保存するか | AppIntervalTracker → SqliteEventWriter |
+| DBがどう画面になるか | MainWindow.ReloadAsync → SqliteTimelineQueryService.QueryStateIntervals → TimelineLayoutBuilderのFromIntervals系 |
+| 区間がどう描かれるか | TimelineViewModels → TimelineTrack（一覧）/ XAML（アプリ別） |
+
+旧バケット方式の描画APIと、Viewerの未使用SQLは撤去済み。Collectorの `report` は時間バケットのサンプルを表示するため、そちらのQueryTimelineとTimelineUsageRowは現役であり残す。イベントキュー・チェックポイント・セッション判定・終了時flushも、保存の正しさを担うので残す。
+
+追跡途中の区間は `AppIntervalTracker` 内部の「開始時刻＋最新AppSnapshot」で表す。確定前の終了時刻は保持せず、書込時にAppEventへ変換する。SQLiteに保存済みの区間やスキーマを変える整理ではない。
 
 ## 関連ドキュメント
 - Collector要件: `docs/requirements_collector.md`
