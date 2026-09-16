@@ -72,7 +72,7 @@ internal static class WindowSnapshotProvider
             Title: GetWindowTitle(fgHwnd),
             State: "Active");
 
-        if (!ShouldTrackWindow(fgHwnd, active.ExeName, active.Title, minimized: false, excludedExeNames))
+        if (!ShouldTrackWindow(fgHwnd, active.ExeName, active.Title, minimized: false, excludedExeNames, isForeground: true))
         {
             return byApp;
         }
@@ -86,14 +86,16 @@ internal static class WindowSnapshotProvider
         string exeName,
         string title,
         bool minimized,
-        HashSet<string> excludedExeNames)
+        HashSet<string> excludedExeNames,
+        bool isForeground = false)
     {
         if (excludedExeNames.Contains(exeName))
         {
             return false;
         }
 
-        if (Win32.GetWindow(hwnd, Win32.GW_OWNER) != IntPtr.Zero)
+        // Owned dialogs are excluded from enumeration, but can be the actual foreground window.
+        if (!isForeground && Win32.GetWindow(hwnd, Win32.GW_OWNER) != IntPtr.Zero)
         {
             return false;
         }
