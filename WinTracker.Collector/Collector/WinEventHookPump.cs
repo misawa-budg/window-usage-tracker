@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 internal sealed class WinEventHookPump : IDisposable
 {
     private readonly Action<CollectReason> _onEvent;
+    private readonly Action<Exception>? _onError;
     private readonly ManualResetEventSlim _started = new(false);
     private readonly List<IntPtr> _hookHandles = [];
     private Thread? _thread;
@@ -10,9 +11,10 @@ internal sealed class WinEventHookPump : IDisposable
     private Exception? _startException;
     private Win32.WinEventProc? _callback;
 
-    public WinEventHookPump(Action<CollectReason> onEvent)
+    public WinEventHookPump(Action<CollectReason> onEvent, Action<Exception>? onError = null)
     {
         _onEvent = onEvent;
+        _onError = onError;
     }
 
     public void Start()
@@ -56,8 +58,11 @@ internal sealed class WinEventHookPump : IDisposable
 
             _started.Set();
 
-            while (Win32.GetMessage(out Win32.MSG msg, IntPtr.Zero, 0, 0) > 0)
+            while (true)
             {
+                int result = Win32.GetMessage(out Win32.MSG msg, IntPtr.Zero, 0, 0);
+                if (result == 0) break;
+                if (result == -1) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
                 _ = Win32.TranslateMessage(ref msg);
                 _ = Win32.DispatchMessage(ref msg);
             }
@@ -66,6 +71,7 @@ internal sealed class WinEventHookPump : IDisposable
         {
             _startException = ex;
             _started.Set();
+            _onError?.Invoke(ex);
         }
         finally
         {

@@ -16,7 +16,7 @@ internal static class ForegroundCollector
         {
             Interlocked.Exchange(ref captureRequested, 1);
             signals.Writer.TryWrite(reason);
-        });
+        }, error => signals.Writer.TryComplete(error));
         hookPump.Start();
         signals.Writer.TryWrite(CollectReason.Startup);
         using var producerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -86,7 +86,8 @@ internal static class ForegroundCollector
                     lastScan = now;
                 }
                 lastObserved = now;
-                if (now - lastCheckpoint >= TimeSpan.FromSeconds(settings.CheckpointIntervalSeconds))
+                if (reason == CollectReason.Checkpoint ||
+                    now - lastCheckpoint >= TimeSpan.FromSeconds(settings.CheckpointIntervalSeconds))
                 {
                     tracker.Checkpoint(now, "checkpoint");
                     lastCheckpoint = now;
