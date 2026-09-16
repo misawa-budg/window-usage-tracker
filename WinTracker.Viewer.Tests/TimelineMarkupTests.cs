@@ -9,6 +9,33 @@ public sealed class TimelineMarkupTests
     private static readonly XNamespace Xaml = "http://schemas.microsoft.com/winfx/2006/xaml";
     private static XDocument Load() => XDocument.Load(Path.Combine(AppContext.BaseDirectory, "Ui", "MainWindow.xaml"));
 
+    [Fact]
+    public void SectionsGroupChartsWithoutRestoringIndividualRowCards()
+    {
+        var doc = Load();
+        Assert.Equal("Dark", (string?)doc.Root!.Elements().Single().Attribute("RequestedTheme"));
+        Assert.Equal(2, doc.Descendants().Count(x => (string?)x.Attribute("Style") == "{StaticResource TimelineSection}"));
+        var rowStyle = doc.Descendants().Single(x => (string?)x.Attribute(Xaml + "Key") == "TimelineRow");
+        Assert.DoesNotContain(rowStyle.Elements(), x => (string?)x.Attribute("Property") is "Background" or "CornerRadius");
+    }
+
+    [Fact]
+    public void TimeGuidesStayBehindDataAndDoNotInterceptInput()
+    {
+        var doc = Load();
+        var template = doc.Descendants().Single(x => (string?)x.Attribute(Xaml + "Key") == "TimeGuidesTemplate");
+        Assert.Equal(new[] { "1", "2", "3" }, template.Descendants().Where(x => x.Name.LocalName == "Border")
+            .Select(x => (string?)x.Attribute("Grid.Column")));
+        var guides = doc.Descendants().Where(x => (string?)x.Attribute("ContentTemplate") == "{StaticResource TimeGuidesTemplate}").ToArray();
+        Assert.Equal(2, guides.Length);
+        Assert.All(guides, x =>
+        {
+            Assert.Equal("False", (string?)x.Attribute("IsHitTestVisible"));
+            Assert.Equal(x, x.Parent!.Elements().First());
+            Assert.Null(x.ElementsAfterSelf().Single().Attribute("Background"));
+        });
+    }
+
     [Theory]
     [InlineData("RangeComboBox", "24h", "1week")]
     [InlineData("AppDisplayModeComboBox", "Running", "StateDetails")]

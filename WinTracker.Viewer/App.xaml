@@ -7,6 +7,8 @@
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
                     <Color x:Key="ColorPageBackground">#FFF3F3F3</Color>
+                    <Color x:Key="ColorSectionBackground">#FFFFFFFF</Color>
+                    <Color x:Key="ColorTimeGuide">#FFE0E0E0</Color>
                     <Color x:Key="ColorBorderSoft">#FFE9ECF5</Color>
                     <Color x:Key="ColorRail">#FFF4F6FB</Color>
                     <Color x:Key="ColorTextPrimary">#FF2E3141</Color>
@@ -16,8 +18,10 @@
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <Color x:Key="ColorPageBackground">#FF202020</Color>
-                    <Color x:Key="ColorBorderSoft">#FF434343</Color>
-                    <Color x:Key="ColorRail">#FF1F1F1F</Color>
+                    <Color x:Key="ColorSectionBackground">#FF292929</Color>
+                    <Color x:Key="ColorTimeGuide">#FF3D3D3D</Color>
+                    <Color x:Key="ColorBorderSoft">#FF393939</Color>
+                    <Color x:Key="ColorRail">#FF242424</Color>
                     <Color x:Key="ColorTextPrimary">#FFFFFFFF</Color>
                     <Color x:Key="ColorTextSecondary">#FFB4B4B4</Color>
 
@@ -26,6 +30,8 @@
             </ResourceDictionary.ThemeDictionaries>
 
             <SolidColorBrush x:Key="BrushPageBackground" Color="{ThemeResource ColorPageBackground}" />
+            <SolidColorBrush x:Key="BrushSectionBackground" Color="{ThemeResource ColorSectionBackground}" />
+            <SolidColorBrush x:Key="BrushTimeGuide" Color="{ThemeResource ColorTimeGuide}" />
             <SolidColorBrush x:Key="BrushBorderSoft" Color="{ThemeResource ColorBorderSoft}" />
             <SolidColorBrush x:Key="BrushRail" Color="{ThemeResource ColorRail}" />
             <SolidColorBrush x:Key="BrushTextPrimary" Color="{ThemeResource ColorTextPrimary}" />
