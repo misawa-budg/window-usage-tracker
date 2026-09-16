@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using WinTracker.Shared.Analytics;
+using WinTracker.Shared.Configuration;
 using Windows.Foundation;
 using Windows.Graphics;
 
@@ -24,7 +25,6 @@ public sealed partial class MainWindow : Window
     private const double BucketTrackWidth = 760.0;
     private const double DailyTrackWidth = 960.0;
     private const int TopAppCount = 8;
-    private const string DefaultDatabasePath = "data/collector.db";
     private const int DailyBucketMinutes = 5;
     private const int MinWindowWidth = 1100;
     private const int MinWindowHeight = 700;
@@ -349,10 +349,8 @@ public sealed partial class MainWindow : Window
 
     private static string ResolveDatabasePath()
     {
-        string candidate = DefaultDatabasePath;
-        return Path.IsPathRooted(candidate)
-            ? candidate
-            : Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, candidate));
+        (string root, string settingsPath) = AppStorage.Resolve();
+        return AppStorage.DatabasePath(root, CollectorSettingsLoader.Load(settingsPath));
     }
 
     private void BuildDailyOverviewRows()

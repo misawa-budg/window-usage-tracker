@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="WinTracker.Collector.Tests" />
+    <Using Include="WinTracker.Shared.Configuration" />
   </ItemGroup>
 
 </Project>

@@ -7,8 +7,7 @@ if (args.Length == 1 && string.Equals(args[0], "--stop", StringComparison.Ordina
     return;
 }
 
-string settingsPath = ResolveSettingsPath();
-string appRootPath = Path.GetDirectoryName(settingsPath) ?? Environment.CurrentDirectory;
+(string appRootPath, string settingsPath) = AppStorage.Resolve();
 CollectorSettings settings = CollectorSettingsLoader.Load(settingsPath);
 bool runBackground = args.Any(x => string.Equals(x, "--background", StringComparison.OrdinalIgnoreCase));
 
@@ -118,18 +117,6 @@ void RequestShutdown()
     {
         cts.Cancel();
     }
-}
-
-static string ResolveSettingsPath()
-{
-    string fileName = "collector.settings.json";
-    string currentDirectoryPath = Path.Combine(Environment.CurrentDirectory, fileName);
-    if (File.Exists(currentDirectoryPath))
-    {
-        return currentDirectoryPath;
-    }
-
-    return Path.Combine(AppContext.BaseDirectory, fileName);
 }
 
 static void HideConsoleWindow()

@@ -1,4 +1,6 @@
-internal sealed class CollectorSettings
+namespace WinTracker.Shared.Configuration;
+
+public sealed record CollectorSettings
 {
     // 互換性のために残す（旧設定名）。
     public int PollingIntervalSeconds { get; init; } = 0;

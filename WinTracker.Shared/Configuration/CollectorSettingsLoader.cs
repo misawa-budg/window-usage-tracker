@@ -1,7 +1,9 @@
 using System.Text;
 using System.Text.Json;
 
-internal static class CollectorSettingsLoader
+namespace WinTracker.Shared.Configuration;
+
+public static class CollectorSettingsLoader
 {
     private static readonly JsonSerializerOptions DeserializeOptions = new()
     {
@@ -31,16 +33,11 @@ internal static class CollectorSettingsLoader
             int rescanInterval = parsed.RescanIntervalSeconds > 0
                 ? parsed.RescanIntervalSeconds
                 : (parsed.PollingIntervalSeconds > 0 ? parsed.PollingIntervalSeconds : 300);
-            string[] excludedExeNames = parsed.ExcludedExeNames
+            string[] excludedExeNames = (parsed.ExcludedExeNames ?? [])
                 .Where(name => !string.IsNullOrWhiteSpace(name))
                 .Select(name => name.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-
-            if (excludedExeNames.Length == 0)
-            {
-                excludedExeNames = new CollectorSettings().ExcludedExeNames;
-            }
 
             string sqliteFilePath = string.IsNullOrWhiteSpace(parsed.SqliteFilePath)
                 ? new CollectorSettings().SqliteFilePath
@@ -56,10 +53,9 @@ internal static class CollectorSettingsLoader
                 ExcludedExeNames = excludedExeNames
             };
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
-            Console.WriteLine($"Failed to load settings, using defaults: {ex.Message}");
-            return new CollectorSettings();
+            throw new InvalidDataException($"Invalid settings JSON: {settingsPath}", ex);
         }
     }
 }
