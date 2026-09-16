@@ -45,13 +45,13 @@ public sealed partial class MainWindow : Window
     private readonly TimelineLayoutBuilder _layoutBuilder = new(topAppCount: TopAppCount);
     private readonly DispatcherQueueTimer _collectorStatusTimer;
 
-    private IReadOnlyList<TimelineUsageRow> _timelineRows = [];
     private IReadOnlyList<ActiveIntervalRow> _activeIntervals = [];
     private IReadOnlyList<AppStateIntervalRow> _stateIntervals = [];
     private AppDisplayMode _appDisplayMode = AppDisplayMode.Running;
     private UsageQueryWindow _currentWindow = CreateLocalDay24hWindow();
     private CancellationTokenSource? _reloadCts;
     private bool _isInitialized;
+    private bool _isClosed;
     private bool _isEnforcingMinSize;
 
     public MainWindow()
@@ -75,6 +75,14 @@ public sealed partial class MainWindow : Window
         _collectorStatusTimer.IsRepeating = true;
         _collectorStatusTimer.Tick += OnCollectorStatusTimerTick;
         _collectorStatusTimer.Start();
+        Closed += (_, _) =>
+        {
+            _isClosed = true;
+            _reloadCts?.Cancel();
+            _collectorStatusTimer.Stop();
+            _collectorStatusTimer.Tick -= OnCollectorStatusTimerTick;
+            AppWindow.Changed -= OnAppWindowChanged;
+        };
         UpdateCollectorStatus();
 
         _isInitialized = true;
@@ -193,30 +201,34 @@ public sealed partial class MainWindow : Window
     private async Task ReloadAsync()
     {
         _reloadCts?.Cancel();
-        _reloadCts = new CancellationTokenSource();
-        CancellationToken token = _reloadCts.Token;
+        using var reloadCts = new CancellationTokenSource();
+        _reloadCts = reloadCts;
+        CancellationToken token = reloadCts.Token;
 
         try
         {
             SetBusy(true, "Loading...");
 
             _currentWindow = GetWindowFromSelection();
+            UsageQueryWindow queryWindow = _currentWindow;
             string dbPath = ResolveDatabasePath();
             if (!File.Exists(dbPath))
             {
                 ClearRows();
-                StatusTextBlock.Text = "DB not found.";
+                StatusTextBlock.Text = $"DB not found: {dbPath}";
                 return;
             }
 
-            (_timelineRows, _activeIntervals, _stateIntervals) = await Task.Run(() =>
+            IReadOnlyList<AppStateIntervalRow> stateIntervals = await Task.Run(() =>
             {
                 using var query = new SqliteTimelineQueryService(dbPath, includeDemo: DemoMode);
-                return (
-                    query.QueryTimeline(_currentWindow),
-                    query.QueryActiveIntervals(_currentWindow),
-                    query.QueryStateIntervals(_currentWindow));
+                return query.QueryStateIntervals(queryWindow);
             }, token);
+            token.ThrowIfCancellationRequested();
+            if (_isClosed) return;
+            _stateIntervals = stateIntervals;
+            _activeIntervals = stateIntervals.Where(x => x.State == "Active")
+                .Select(x => new ActiveIntervalRow(x.ExeName, x.StateStartUtc, x.StateEndUtc)).ToArray();
             _appDisplayMode = GetAppDisplayMode();
 
             if (GetRangeLabel() == "24h")
@@ -242,16 +254,23 @@ public sealed partial class MainWindow : Window
         }
         catch (OperationCanceledException)
         {
-            StatusTextBlock.Text = "Canceled";
+            // Superseded loads must not overwrite the current UI.
         }
         catch (Exception ex)
         {
-            StatusTextBlock.Text = $"Error: {ex.Message}";
+            if (!_isClosed && ReferenceEquals(_reloadCts, reloadCts)) StatusTextBlock.Text = $"Error: {ex.Message}";
         }
         finally
         {
-            UpdateCollectorStatus();
-            SetBusy(false, StatusTextBlock.Text);
+            if (ReferenceEquals(_reloadCts, reloadCts))
+            {
+                _reloadCts = null;
+                if (!_isClosed)
+                {
+                    UpdateCollectorStatus();
+                    SetBusy(false, StatusTextBlock.Text);
+                }
+            }
         }
     }
 
@@ -263,7 +282,7 @@ public sealed partial class MainWindow : Window
     private void UpdateCollectorStatus()
     {
         CollectorStatusTextBlock.Text = IsCollectorRunning()
-            ? "Collector: Running"
+            ? "Collector: Process detected"
             : "Collector: Stopped";
     }
 
@@ -462,22 +481,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void BuildOverviewRows()
-    {
-        _overviewRows.Clear();
-        IReadOnlyList<TimelineRowLayout> rows = _layoutBuilder.BuildOverviewRows(
-            _timelineRows,
-            _currentWindow,
-            BucketTrackWidth);
-
-        foreach (TimelineRowLayout row in rows)
-        {
-            _overviewRows.Add(new TimelineRowViewModel(
-                row.BucketLabel,
-                row.TotalLabel,
-                row.Segments.Select(ToTimelineSegmentViewModel).ToList()));
-        }
-    }
 
     private void BuildAppDailyRows()
     {
@@ -569,7 +572,6 @@ public sealed partial class MainWindow : Window
 
     private void ClearRows()
     {
-        _timelineRows = [];
         _activeIntervals = [];
         _stateIntervals = [];
         _overviewRows.Clear();
