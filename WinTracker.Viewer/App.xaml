@@ -13,7 +13,7 @@
                     <Color x:Key="ColorBorderSoft">#FFE9ECF5</Color>
                     <Color x:Key="ColorRail">#FFF4F6FB</Color>
                     <Color x:Key="ColorTextPrimary">#FF2E3141</Color>
-                    <Color x:Key="ColorTextSecondary">#FF7D8398</Color>
+                    <Color x:Key="ColorTextSecondary">#FF5F6575</Color>
 
                     <Color x:Key="ColorStateActive">#FF005FB8</Color>
                     <Color x:Key="ColorStateOpen">#FF315482</Color>
@@ -28,7 +28,7 @@
                     <Color x:Key="ColorBorderSoft">#FF434343</Color>
                     <Color x:Key="ColorRail">#FF1F1F1F</Color>
                     <Color x:Key="ColorTextPrimary">#FFFFFFFF</Color>
-                    <Color x:Key="ColorTextSecondary">#FFA0A0A0</Color>
+                    <Color x:Key="ColorTextSecondary">#FFB4B4B4</Color>
 
                     <Color x:Key="ColorStateActive">#FF60CDFF</Color>
                     <Color x:Key="ColorStateOpen">#FF3E6C99</Color>

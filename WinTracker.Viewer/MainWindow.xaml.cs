@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
@@ -25,7 +26,6 @@ public sealed partial class MainWindow : Window
     private const int DailyBucketMinutes = 5;
     private const int MinWindowWidth = 1100;
     private const int MinWindowHeight = 700;
-    private const int CompactTickSwitchWidth = 1360;
     private static readonly SolidColorBrush TransparentBrush =
         new(Windows.UI.Color.FromArgb(0, 0, 0, 0));
 
@@ -52,7 +52,6 @@ public sealed partial class MainWindow : Window
         if (DemoMode) Title = "WinTracker — DEMO (synthetic data)";
         SystemBackdrop = new MicaBackdrop();
         ConfigureWindowSizing();
-        UpdateTimeTickLabels();
 
         OverviewDailyListView.ItemsSource = _overviewDailyRows;
         AppDailyListView.ItemsSource = _appDailyLanes;
@@ -88,7 +87,6 @@ public sealed partial class MainWindow : Window
     private void OnAppWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
     {
         EnforceMinimumWindowSize();
-        UpdateTimeTickLabels();
     }
 
     private void EnforceMinimumWindowSize()
@@ -109,43 +107,6 @@ public sealed partial class MainWindow : Window
         _isEnforcingMinSize = true;
         AppWindow.Resize(new SizeInt32(width, height));
         _isEnforcingMinSize = false;
-    }
-
-    private void UpdateTimeTickLabels()
-    {
-        bool compact = AppWindow.Size.Width < CompactTickSwitchWidth;
-        SetTickTexts(Tick00TextBlock, Tick06TextBlock, Tick12TextBlock, Tick18TextBlock, Tick24TextBlock, compact);
-        SetTickTexts(AppTick00TextBlock, AppTick06TextBlock, AppTick12TextBlock, AppTick18TextBlock, AppTick24TextBlock, compact);
-
-        UpdateTickOffsets();
-    }
-
-    private void UpdateTickOffsets()
-    {
-        const double offset = 100.0;
-        SetTickOffsets(Tick06TextBlock, Tick18TextBlock, offset);
-        SetTickOffsets(AppTick06TextBlock, AppTick18TextBlock, offset);
-    }
-
-    private static void SetTickTexts(
-        TextBlock tick00,
-        TextBlock tick06,
-        TextBlock tick12,
-        TextBlock tick18,
-        TextBlock tick24,
-        bool compact)
-    {
-        tick00.Text = compact ? "0" : "00:00";
-        tick06.Text = compact ? "6" : "06:00";
-        tick12.Text = compact ? "12" : "12:00";
-        tick18.Text = compact ? "18" : "18:00";
-        tick24.Text = compact ? "24" : "24:00";
-    }
-
-    private static void SetTickOffsets(TextBlock tick06, TextBlock tick18, double offset)
-    {
-        tick06.Margin = new Thickness(-offset, 0, 0, 0);
-        tick18.Margin = new Thickness(offset, 0, 0, 0);
     }
 
     private async void OnRefreshClicked(object sender, RoutedEventArgs e)
@@ -197,6 +158,13 @@ public sealed partial class MainWindow : Window
 
             _currentWindow = GetWindowFromSelection();
             UsageQueryWindow queryWindow = _currentWindow;
+            var culture = CultureInfo.GetCultureInfo("ja-JP");
+            DateTimeOffset firstDay = queryWindow.FromUtc.ToLocalTime();
+            DateTimeOffset lastDay = queryWindow.ToUtc.AddTicks(-1).ToLocalTime();
+            DateRangeTextBlock.Text = GetRangeLabel() == "24h"
+                ? firstDay.ToString("yyyy年M月d日（ddd）", culture)
+                : $"{firstDay:yyyy/M/d} – {lastDay:yyyy/M/d}";
+            ToolTipService.SetToolTip(StatusTextBlock, null);
             string dbPath = ResolveDatabasePath();
             if (!File.Exists(dbPath))
             {
@@ -237,7 +205,8 @@ public sealed partial class MainWindow : Window
             RebuildOverviewLegend();
             RebuildAppLegend();
 
-            StatusTextBlock.Text = $"{(DemoMode ? "DEMO · 合成データ / " : "")}更新 {DateTime.Now:HH:mm}";
+            string result = _stateIntervals.Count == 0 ? "対象期間の記録はありません" : $"更新 {DateTime.Now:HH:mm}";
+            StatusTextBlock.Text = $"{(DemoMode ? "DEMO · 合成データ / " : "")}{result}";
             ToolTipService.SetToolTip(StatusTextBlock, $"読み込んだ区間: {_stateIntervals.Count:N0}件");
             if (measurement is not null)
                 await measurement.CompleteAsync((FrameworkElement)Content, GetRangeLabel(), _stateIntervals.Count, token);
