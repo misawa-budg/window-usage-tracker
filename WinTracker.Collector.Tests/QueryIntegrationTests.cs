@@ -26,6 +26,21 @@ public sealed class QueryIntegrationTests
         });
     }
 
+    [Fact]
+    public void LastPartialBucketIsClippedInBothQueryServices()
+    {
+        WithDatabase((path, start) =>
+        {
+            var window = new UsageQueryWindow(start, start.AddMinutes(90), TimeSpan.FromHours(1));
+            using var collector = new SqliteUsageQueryService(path);
+            using var viewer = new SqliteTimelineQueryService(path);
+            Assert.Equal(5400, collector.QueryTimeline(window).Sum(row => row.Seconds));
+            Assert.Equal(5400, viewer.QueryTimeline(window).Sum(row => row.Seconds));
+            Assert.Throws<ArgumentOutOfRangeException>(() => viewer.QueryTimeline(window with { BucketSize = TimeSpan.Zero }));
+            Assert.Throws<ArgumentException>(() => collector.QueryTimeline(window with { ToUtc = start }));
+        });
+    }
+
     private static void WithDatabase(Action<string, DateTimeOffset> test)
     {
         string path = Path.Combine(Path.GetTempPath(), $"wintracker-query-{Guid.NewGuid():N}.db");

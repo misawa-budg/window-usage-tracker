@@ -7,6 +7,13 @@ public readonly record struct UsageQueryWindow(
 {
     public int BucketSeconds => (int)BucketSize.TotalSeconds;
 
+    public void Validate()
+    {
+        if (ToUtc <= FromUtc) throw new ArgumentException("Query end must be after start.");
+        if (BucketSize.TotalSeconds < 1 || BucketSize.TotalSeconds > int.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(BucketSize), "Bucket size must be at least one second.");
+    }
+
     public static UsageQueryWindow Last24Hours(DateTimeOffset nowUtc) =>
         new(
             FromUtc: nowUtc.AddHours(-24),

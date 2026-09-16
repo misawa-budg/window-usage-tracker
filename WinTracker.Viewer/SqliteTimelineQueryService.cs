@@ -26,11 +26,11 @@ internal sealed class SqliteTimelineQueryService : IDisposable
             WITH RECURSIVE buckets AS (
                 SELECT
                     unixepoch($from_utc) AS bucket_start,
-                    unixepoch($from_utc) + $bucket_seconds AS bucket_end
+                    MIN(unixepoch($from_utc) + $bucket_seconds, unixepoch($to_utc)) AS bucket_end
                 UNION ALL
                 SELECT
                     bucket_end,
-                    bucket_end + $bucket_seconds
+                    MIN(bucket_end + $bucket_seconds, unixepoch($to_utc))
                 FROM buckets
                 WHERE bucket_end < unixepoch($to_utc)
             ),
@@ -167,6 +167,7 @@ internal sealed class SqliteTimelineQueryService : IDisposable
 
     private void BindWindow(SqliteCommand command, UsageQueryWindow window)
     {
+        window.Validate();
         command.Parameters.AddWithValue("$include_demo", _includeDemo ? 1 : 0);
         command.Parameters.AddWithValue("$from_utc", window.FromUtc.ToString("O"));
         command.Parameters.AddWithValue("$to_utc", window.ToUtc.ToString("O"));
