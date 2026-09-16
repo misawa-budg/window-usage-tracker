@@ -82,6 +82,8 @@ dotnet list .\WinTracker.slnx package --vulnerable --include-transitive
 ```
 
 構成は [architecture](docs/architecture.md)、検証範囲と残課題は [verification](docs/verification.md) を参照してください。
+表示上はアプリ名の末尾の `.exe` を省略しますが、内部の識別子と詳細ツールチップは元の名前を保持します。
+週表示の性能比較と説明できる設計上の特徴は [interview-notes](docs/interview-notes.md) にまとめています。
 
 ## 配布パッケージの作成
 
