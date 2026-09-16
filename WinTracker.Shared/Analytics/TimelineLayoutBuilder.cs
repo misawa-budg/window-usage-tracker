@@ -540,44 +540,24 @@ public sealed class TimelineLayoutBuilder
                 .Where(x => x.StateEndUtc > x.StateStartUtc)
                 .ToList();
 
-            var boundaries = new List<DateTimeOffset>(appIntervals.Count * 2 + 2)
-            {
-                window.FromUtc,
-                window.ToUtc
-            };
-            boundaries.AddRange(appIntervals.Select(x => x.StateStartUtc));
-            boundaries.AddRange(appIntervals.Select(x => x.StateEndUtc));
-            List<DateTimeOffset> orderedBoundaries = boundaries
-                .Distinct()
-                .OrderBy(x => x)
-                .ToList();
-
             var accumulator = new SegmentAccumulator();
             double laneTotalSeconds = 0;
 
-            for (int index = 0; index < orderedBoundaries.Count - 1; index++)
+            foreach (IntervalSlice<AppStateIntervalRow> slice in IntervalSweep.Build(appIntervals, window.FromUtc, window.ToUtc,
+                x => x.StateStartUtc, x => x.StateEndUtc, CompareStateIntervals))
             {
-                DateTimeOffset sliceStartUtc = orderedBoundaries[index];
-                DateTimeOffset sliceEndUtc = orderedBoundaries[index + 1];
-                if (sliceEndUtc <= sliceStartUtc)
-                {
-                    continue;
-                }
-
+                DateTimeOffset sliceStartUtc = slice.Start;
+                DateTimeOffset sliceEndUtc = slice.End;
                 double sliceSeconds = (sliceEndUtc - sliceStartUtc).TotalSeconds;
                 double sliceWidth = trackWidth * (sliceSeconds / windowSeconds);
 
-                List<AppStateIntervalRow> candidates = appIntervals
-                    .Where(x => x.StateStartUtc < sliceEndUtc && x.StateEndUtc > sliceStartUtc)
-                    .ToList();
-
-                if (candidates.Count == 0)
+                if (slice.Value is null)
                 {
                     accumulator.AddNoData(sliceWidth);
                     continue;
                 }
 
-                string state = SelectDominantState(candidates);
+                string state = slice.Value.Value.State;
                 laneTotalSeconds += sliceSeconds;
                 accumulator.AddData(
                     sliceWidth,
@@ -647,44 +627,24 @@ public sealed class TimelineLayoutBuilder
                 .Where(x => x.StateEndUtc > x.StateStartUtc)
                 .ToList();
 
-            var boundaries = new List<DateTimeOffset>(dayIntervals.Count * 2 + 2)
-            {
-                dayStart,
-                dayEnd
-            };
-            boundaries.AddRange(dayIntervals.Select(x => x.StateStartUtc));
-            boundaries.AddRange(dayIntervals.Select(x => x.StateEndUtc));
-            List<DateTimeOffset> orderedBoundaries = boundaries
-                .Distinct()
-                .OrderBy(x => x)
-                .ToList();
-
             var accumulator = new SegmentAccumulator();
             double dayTotalSeconds = 0;
 
-            for (int index = 0; index < orderedBoundaries.Count - 1; index++)
+            foreach (IntervalSlice<AppStateIntervalRow> slice in IntervalSweep.Build(dayIntervals, dayStart, dayEnd,
+                x => x.StateStartUtc, x => x.StateEndUtc, CompareStateIntervals))
             {
-                DateTimeOffset sliceStartUtc = orderedBoundaries[index];
-                DateTimeOffset sliceEndUtc = orderedBoundaries[index + 1];
-                if (sliceEndUtc <= sliceStartUtc)
-                {
-                    continue;
-                }
-
+                DateTimeOffset sliceStartUtc = slice.Start;
+                DateTimeOffset sliceEndUtc = slice.End;
                 double sliceSeconds = (sliceEndUtc - sliceStartUtc).TotalSeconds;
                 double sliceWidth = trackWidth * (sliceSeconds / daySeconds);
 
-                List<AppStateIntervalRow> candidates = dayIntervals
-                    .Where(x => x.StateStartUtc < sliceEndUtc && x.StateEndUtc > sliceStartUtc)
-                    .ToList();
-
-                if (candidates.Count == 0)
+                if (slice.Value is null)
                 {
                     accumulator.AddNoData(sliceWidth);
                     continue;
                 }
 
-                string state = SelectDominantState(candidates);
+                string state = slice.Value.Value.State;
                 dayTotalSeconds += sliceSeconds;
                 accumulator.AddData(
                     sliceWidth,
@@ -742,49 +702,24 @@ public sealed class TimelineLayoutBuilder
             .Select(x => x.Label)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var boundaries = new List<DateTimeOffset>(visibleIntervals.Count * 2 + 2)
-        {
-            window.FromUtc,
-            window.ToUtc
-        };
-
-        boundaries.AddRange(visibleIntervals.Select(x => x.StateStartUtc));
-        boundaries.AddRange(visibleIntervals.Select(x => x.StateEndUtc));
-
-        List<DateTimeOffset> orderedBoundaries = boundaries
-            .Distinct()
-            .OrderBy(x => x)
-            .ToList();
-
         var accumulator = new StateStackAccumulator(OverviewState);
         double totalSeconds = 0;
 
-        for (int index = 0; index < orderedBoundaries.Count - 1; index++)
+        foreach (IntervalSlice<ActiveIntervalRow> slice in IntervalSweep.Build(visibleIntervals, window.FromUtc, window.ToUtc,
+            x => x.StateStartUtc, x => x.StateEndUtc, CompareActiveIntervals))
         {
-            DateTimeOffset sliceStartUtc = orderedBoundaries[index];
-            DateTimeOffset sliceEndUtc = orderedBoundaries[index + 1];
-            if (sliceEndUtc <= sliceStartUtc)
-            {
-                continue;
-            }
-
+            DateTimeOffset sliceStartUtc = slice.Start;
+            DateTimeOffset sliceEndUtc = slice.End;
             double sliceSeconds = (sliceEndUtc - sliceStartUtc).TotalSeconds;
             double sliceWidth = trackWidth * (sliceSeconds / windowSeconds);
 
-            List<ActiveIntervalRow> candidates = visibleIntervals
-                .Where(x => x.StateStartUtc < sliceEndUtc && x.StateEndUtc > sliceStartUtc)
-                .ToList();
-
-            if (candidates.Count == 0)
+            if (slice.Value is null)
             {
                 accumulator.AddNoData(sliceWidth);
                 continue;
             }
 
-            ActiveIntervalRow topInterval = candidates
-                .OrderByDescending(x => x.StateStartUtc)
-                .ThenBy(x => x.ExeName, StringComparer.OrdinalIgnoreCase)
-                .First();
+            ActiveIntervalRow topInterval = slice.Value.Value;
 
             totalSeconds += sliceSeconds;
             accumulator.AddData(
@@ -1327,6 +1262,19 @@ public sealed class TimelineLayoutBuilder
             .Where(g => g.Sum(v => (v.StateEndUtc - v.StateStartUtc).TotalSeconds) >= minVisibleSeconds)
             .Select(g => g.Key)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static int CompareStateIntervals(AppStateIntervalRow left, AppStateIntervalRow right)
+    {
+        int order = StatePriority(right.State).CompareTo(StatePriority(left.State));
+        if (order == 0) order = right.StateStartUtc.CompareTo(left.StateStartUtc);
+        return order == 0 ? StringComparer.OrdinalIgnoreCase.Compare(left.State, right.State) : order;
+    }
+
+    private static int CompareActiveIntervals(ActiveIntervalRow left, ActiveIntervalRow right)
+    {
+        int order = right.StateStartUtc.CompareTo(left.StateStartUtc);
+        return order == 0 ? StringComparer.OrdinalIgnoreCase.Compare(left.ExeName, right.ExeName) : order;
     }
 
     private static string SelectDominantState(IReadOnlyList<AppStateIntervalRow> candidates) =>
