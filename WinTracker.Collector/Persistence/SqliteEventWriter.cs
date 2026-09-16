@@ -125,6 +125,9 @@ internal sealed class SqliteEventWriter : IAppEventWriter
 
             CREATE INDEX IF NOT EXISTS idx_app_events_exe_time
             ON app_events(exe_name, event_at_utc);
+
+            CREATE INDEX IF NOT EXISTS idx_app_events_interval_end
+            ON app_events(state_end_utc, state_start_utc);
             """;
         command.ExecuteNonQuery();
     }

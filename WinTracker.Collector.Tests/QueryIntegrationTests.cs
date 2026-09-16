@@ -41,6 +41,23 @@ public sealed class QueryIntegrationTests
         });
     }
 
+    [Fact]
+    public void IntervalRangeQueryUsesTheIntervalEndIndex()
+    {
+        WithDatabase((path, start) =>
+        {
+            using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path }.ToString());
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "EXPLAIN QUERY PLAN SELECT exe_name FROM app_events WHERE state_end_utc > $from AND state_start_utc < $to";
+            command.Parameters.AddWithValue("$from", start.ToString("O"));
+            command.Parameters.AddWithValue("$to", start.AddDays(1).ToString("O"));
+            using var reader = command.ExecuteReader();
+            Assert.True(reader.Read());
+            Assert.Contains("idx_app_events_interval_end", reader.GetString(3));
+        });
+    }
+
     private static void WithDatabase(Action<string, DateTimeOffset> test)
     {
         string path = Path.Combine(Path.GetTempPath(), $"wintracker-query-{Guid.NewGuid():N}.db");
