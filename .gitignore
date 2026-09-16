@@ -5,7 +5,11 @@ WinTracker.Collector/logs/
 WinTracker.Collector/data/
 data/
 artifacts/
-docs/
+docs/*
+!docs/architecture.md
+!docs/requirements_collector.md
+!docs/requirements_viewer.md
+!docs/verification.md
 
 # Visual Studio
 .vs/

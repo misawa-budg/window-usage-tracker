@@ -5,6 +5,7 @@ Windows 11 向けの軽量なアプリケーション利用時間トラッカー
 `Active` は Windows の foreground 特性上、同時刻に原則1アプリです。
 
 ## 構成
+
 - `WinTracker.Collector`: 常駐収集プロセス（UIなし）
 - `WinTracker.Viewer`: 可視化ダッシュボード（WinUI 3）
 - `WinTracker.Shared`: 共通モデル
@@ -14,8 +15,12 @@ Windows 11 向けの軽量なアプリケーション利用時間トラッカー
 配布されたZipファイル（例：`window-usage-tracker-portable-*.zip`）を展開し、中にある以下の `.cmd` ファイルをダブルクリックするだけで利用できます。
 いずれも同じ設定ファイル（`data/collector.db`等）を共有して動作します。
 
-1. **`Run-Collector.cmd`**: アプリの利用時間の記録を開始します。（バックグラウンドで常駐）
+1. **`Run-Collector.cmd`**: コンソール付きで収集を開始します。Ctrl+Cで停止します。
 2. **`Run-Viewer.cmd`**: 記録されたデータをタイムラインダッシュボードとして表示します。
+3. **`Stop-Collector.cmd`**: 新版Collectorへ正常停止を要求します（非表示起動時にも使用可能）。
+4. **`Run-Demo.cmd`**: 実データとは別の `data/demo.db` に合成データを作り、DEMO表示付きViewerを起動します。
+
+旧版の配布フォルダや実データを新規ビルドで自動更新することはありません。差し替え時は旧Collectorを停止し、DBと設定をバックアップしてから移行してください。旧版には `--stop` がありません。
 
 ## 主な機能（Viewer）
 
@@ -27,24 +32,56 @@ Windows 11 向けの軽量なアプリケーション利用時間トラッカー
 - **ツールチップ表示**: 時刻と継続時間は `HH:mm:ss` で表示します。
 
 ## 前提条件
+
 - Windows 11
-- .NET 8 ランタイム 及び Windows App SDK（WinUI 3 実行環境）
+- 開発: .NET 10 SDK、WinUI 3をビルドできるVisual Studio / Windows SDK
+- framework-dependent版: Collectorに.NET 10、Viewerに.NET 8とWindows App SDK 1.7の実行環境
+- self-contained版: .NET / Windows App SDKを同梱（Windows 11は必要）
 
 ## 開発・ビルド時の実行
+
 ```powershell
 # Collector 起動（Ctrl+C で停止）
 dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj
 
 # Viewer 起動
 dotnet run --project .\WinTracker.Viewer\WinTracker.Viewer.csproj
+
+# 非表示起動した新版Collectorへの正常停止要求
+dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- --stop
 ```
 
 **テストデータの投入（シード）**
-UIの確認用にダミーデータを流し込むことができます。
+`--demo` が必須です。通常DBへのシード投入と `--replace-all` は廃止しています。
+
 ```powershell
-# テストデータの投入
-dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- seed 24h mixed --replace
+dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- seed 1week mixed --demo --replace
+dotnet run --project .\WinTracker.Viewer\WinTracker.Viewer.csproj -- --demo
 ```
+
+## 保存・集計・プライバシー
+
+- 設定はCollector / Viewerで共通です。開発時はソリューション配下の `WinTracker.Collector/collector.settings.json`、Portable版はルートの設定を使います。
+- 相対DBパスの基準は開発時にソリューションルート、Portable版ではバンドルルートです。明示する場合は両プロセスに `WINTRACKER_HOME` を渡してください。いずれも見つからない場合は `%LOCALAPPDATA%/WinTracker` を使います。
+- `rescanIntervalSeconds` は全列挙の再確認間隔（既定300秒）。`checkpointIntervalSeconds` は継続区間の保存間隔（既定15秒、1〜300秒）です。状態遷移で閉じた区間は30件またはチェックポイントでflushします。
+- `storeWindowTitles` は既定falseです。タイトルはフィルタ判定に一時使用しますが、標準出力には出しません。trueにするとDBへ平文保存されます。過去に保存したタイトルは自動削除されません。
+- ロック等で入力デスクトップが利用できない場合、または観測間隔が保存間隔の2倍を超えた場合は、最後の観測時刻で区間を切ります。未観測時間を使用時間に補完しません。ロック境界には保存間隔程度の誤差があり、正常終了時も最後の観測以降を足しません。
+- `Active` は前面アプリであり、キー入力や実作業時間の証明ではありません。放置中の無操作判定は未実装です。複数ウィンドウの集約は `Active > Minimized > Open` を維持しています。
+- `Running` は観測対象ウィンドウの3状態を統合した表示であり、ウィンドウのない全プロセスの稼働時間ではありません。
+- 短時間の利用も表示します。アプリ別一覧は8件に制限しません。Overviewの凡例・描画は上位8件＋Otherです。合計はHH:mm、詳細ツールチップは秒単位です。
+- 通常画面・レポートでは過去の `demo-seed` 行も集計から除外します。DEMO画面は合成データで、当日分には未来時刻を含むサンプルもあります。
+- `Collector: Process detected` はプロセスの存在確認で、保存処理の健全性までは保証しません。Viewerのデータ更新は更新ボタンで行います。
+
+## 検証
+
+```powershell
+dotnet build .\WinTracker.slnx
+dotnet test .\WinTracker.Collector.Tests\WinTracker.Collector.Tests.csproj
+dotnet test .\WinTracker.Viewer.Tests\WinTracker.Viewer.Tests.csproj
+dotnet list .\WinTracker.slnx package --vulnerable --include-transitive
+```
+
+構成は [architecture](docs/architecture.md)、検証範囲と残課題は [verification](docs/verification.md) を参照してください。
 
 ## 配布パッケージの作成
 
@@ -54,6 +91,8 @@ dotnet run --project .\WinTracker.Collector\WinTracker.Collector.csproj -- seed 
 # Releaseビルドを行い全zipパッケージを生成
 powershell -ExecutionPolicy Bypass -File .\release.ps1
 ```
+
+毎回 `artifacts/release-日時` へ作成します。既存の非空出力先は拒否し、既存DBの削除や稼働中アプリの強制終了はしません。FD/SCのViewerビルド出力も分離しています。
 
 ## License
 MIT License (`LICENSE`)
