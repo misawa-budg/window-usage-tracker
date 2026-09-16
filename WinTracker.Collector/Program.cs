@@ -1,6 +1,12 @@
 using System.Runtime.InteropServices;
 using System.Threading;
 
+if (args.Length == 1 && string.Equals(args[0], "--stop", StringComparison.OrdinalIgnoreCase))
+{
+    Environment.ExitCode = CollectorControl.RequestStop() ? 0 : 1;
+    return;
+}
+
 string settingsPath = ResolveSettingsPath();
 string appRootPath = Path.GetDirectoryName(settingsPath) ?? Environment.CurrentDirectory;
 CollectorSettings settings = CollectorSettingsLoader.Load(settingsPath);
@@ -41,6 +47,10 @@ Console.WriteLine($"Logging to SQLite: {sqlitePath}");
 
 using var cts = new CancellationTokenSource();
 int shutdownRequested = 0;
+using var shutdownCompleted = new ManualResetEventSlim(false);
+using var stopSignal = new EventWaitHandle(false, EventResetMode.AutoReset, CollectorControl.StopEventName);
+RegisteredWaitHandle stopRegistration = ThreadPool.RegisterWaitForSingleObject(
+    stopSignal, (_, _) => RequestShutdown(), null, Timeout.Infinite, executeOnlyOnce: true);
 ConsoleCtrlHandler shutdownHandler = OnConsoleControlSignal;
 
 Console.CancelKeyPress += OnCancelKeyPress;
@@ -56,9 +66,18 @@ try
 }
 finally
 {
-    Console.CancelKeyPress -= OnCancelKeyPress;
-    AppDomain.CurrentDomain.ProcessExit -= OnProcessExit;
-    _ = NativeMethods.SetConsoleCtrlHandler(shutdownHandler, add: false);
+    try
+    {
+        eventWriter.Dispose();
+    }
+    finally
+    {
+        shutdownCompleted.Set();
+        stopRegistration.Unregister(null);
+        Console.CancelKeyPress -= OnCancelKeyPress;
+        AppDomain.CurrentDomain.ProcessExit -= OnProcessExit;
+        _ = NativeMethods.SetConsoleCtrlHandler(shutdownHandler, add: false);
+    }
 }
 
 void OnCancelKeyPress(object? sender, ConsoleCancelEventArgs e)
@@ -67,7 +86,11 @@ void OnCancelKeyPress(object? sender, ConsoleCancelEventArgs e)
     RequestShutdown();
 }
 
-void OnProcessExit(object? sender, EventArgs e) => RequestShutdown();
+void OnProcessExit(object? sender, EventArgs e)
+{
+    RequestShutdown();
+    shutdownCompleted.Wait(TimeSpan.FromSeconds(3));
+}
 
 bool OnConsoleControlSignal(int controlType)
 {
@@ -76,6 +99,8 @@ bool OnConsoleControlSignal(int controlType)
         or NativeMethods.CTRL_SHUTDOWN_EVENT)
     {
         RequestShutdown();
+        // Returning immediately allows Windows to terminate before the async loop flushes.
+        shutdownCompleted.Wait(TimeSpan.FromSeconds(3));
         return true;
     }
 

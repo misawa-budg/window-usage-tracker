@@ -21,7 +21,8 @@ internal sealed class SqliteEventWriter : IAppEventWriter
 
         _connection = new SqliteConnection(new SqliteConnectionStringBuilder
         {
-            DataSource = databasePath, Mode = SqliteOpenMode.ReadWriteCreate, Cache = SqliteCacheMode.Shared
+            DataSource = databasePath, Mode = SqliteOpenMode.ReadWriteCreate, Cache = SqliteCacheMode.Shared,
+            DefaultTimeout = 2
         }.ToString());
         _connection.Open();
         InitializeSchema(_connection);
