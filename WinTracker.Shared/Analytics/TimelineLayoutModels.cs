@@ -16,11 +16,6 @@ public readonly record struct StateLaneLayout(
     string TotalLabel,
     IReadOnlyList<SegmentLayout> Segments);
 
-public readonly record struct StateGroupLayout(
-    string Label,
-    string TotalLabel,
-    IReadOnlyList<StateLaneLayout> Lanes);
-
 public readonly record struct StackedEntryLayout(
     string Label,
     string ColorHex,
