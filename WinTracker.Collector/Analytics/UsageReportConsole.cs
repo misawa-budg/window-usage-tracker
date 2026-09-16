@@ -23,7 +23,7 @@ internal static class UsageReportConsole
             !string.Equals(args[1], "24h", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(args[1], "1week", StringComparison.OrdinalIgnoreCase))
         {
-            Console.WriteLine("Usage: dotnet run --project .\\WinTracker\\WinTracker.csproj -- report [24h|1week]");
+            Console.WriteLine("Usage: dotnet run --project .\\WinTracker.Collector\\WinTracker.Collector.csproj -- report [24h|1week] [--demo]");
             return true;
         }
 
