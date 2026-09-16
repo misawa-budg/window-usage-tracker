@@ -32,4 +32,12 @@ public sealed class AppStorageTests
         Assert.Throws<InvalidOperationException>(() => AppStorage.DatabasePath(root,
             settings with { SqliteFilePath = "data/demo.db" }, demo: true));
     }
+
+    [Fact]
+    public void SeedWithoutDemoRefusesToCreateDatabase()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"wintracker-seed-{Guid.NewGuid():N}");
+        Assert.True(DummySeedConsole.TryHandle(["seed", "--replace-all"], new CollectorSettings(), root));
+        Assert.False(Directory.Exists(root));
+    }
 }

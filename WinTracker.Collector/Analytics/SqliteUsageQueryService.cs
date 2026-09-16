@@ -4,10 +4,15 @@ using WinTracker.Shared.Analytics;
 internal sealed class SqliteUsageQueryService : IDisposable
 {
     private readonly SqliteConnection _connection;
+    private readonly bool _includeDemo;
 
-    public SqliteUsageQueryService(string databasePath)
+    public SqliteUsageQueryService(string databasePath, bool includeDemo = false)
     {
-        _connection = new SqliteConnection($"Data Source={databasePath};Mode=ReadOnly;Cache=Shared");
+        _includeDemo = includeDemo;
+        _connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath, Mode = SqliteOpenMode.ReadOnly, Cache = SqliteCacheMode.Shared
+        }.ToString());
         _connection.Open();
     }
 
@@ -25,6 +30,7 @@ internal sealed class SqliteUsageQueryService : IDisposable
                 FROM app_events
                 WHERE state_end_utc > $from_utc
                   AND state_start_utc < $to_utc
+                  AND ($include_demo = 1 OR source <> 'demo-seed')
             )
             SELECT
                 exe_name,
@@ -64,6 +70,7 @@ internal sealed class SqliteUsageQueryService : IDisposable
                 FROM app_events
                 WHERE state_end_utc > $from_utc
                   AND state_start_utc < $to_utc
+                  AND ($include_demo = 1 OR source <> 'demo-seed')
             ),
             durations AS (
                 SELECT
@@ -125,6 +132,7 @@ internal sealed class SqliteUsageQueryService : IDisposable
                 FROM app_events
                 WHERE state_end_utc > $from_utc
                   AND state_start_utc < $to_utc
+                  AND ($include_demo = 1 OR source <> 'demo-seed')
             ),
             overlaps AS (
                 SELECT
@@ -168,8 +176,9 @@ internal sealed class SqliteUsageQueryService : IDisposable
 
     public void Dispose() => _connection.Dispose();
 
-    private static void BindWindow(SqliteCommand command, UsageQueryWindow window)
+    private void BindWindow(SqliteCommand command, UsageQueryWindow window)
     {
+        command.Parameters.AddWithValue("$include_demo", _includeDemo ? 1 : 0);
         command.Parameters.AddWithValue("$from_utc", window.FromUtc.ToString("O"));
         command.Parameters.AddWithValue("$to_utc", window.ToUtc.ToString("O"));
     }

@@ -2,7 +2,7 @@ using WinTracker.Shared.Analytics;
 
 internal static class UsageReportConsole
 {
-    public static bool TryHandle(string[] args, CollectorSettings settings, string baseDirectory)
+    public static bool TryHandle(string[] args, CollectorSettings settings, string baseDirectory, bool demoMode = false)
     {
         if (args.Length == 0)
         {
@@ -34,7 +34,7 @@ internal static class UsageReportConsole
             return true;
         }
 
-        using var query = new SqliteUsageQueryService(sqlitePath);
+        using var query = new SqliteUsageQueryService(sqlitePath, includeDemo: demoMode);
         IReadOnlyList<AppUsageSummaryRow> summaries = query.QueryAppSummaries(window);
         IReadOnlyList<AppStateUsageRow> states = query.QueryStateTotals(window);
         IReadOnlyList<TimelineUsageRow> timeline = query.QueryTimeline(window);

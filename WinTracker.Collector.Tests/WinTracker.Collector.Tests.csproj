@@ -23,6 +23,8 @@
   <ItemGroup>
     <ProjectReference Include="..\WinTracker.Collector\WinTracker.Collector.csproj" />
     <Using Include="WinTracker.Shared.Configuration" />
+    <!-- Exercise the actual Viewer SQL without starting the WinUI application. -->
+    <Compile Include="..\WinTracker.Viewer\SqliteTimelineQueryService.cs" Link="Viewer\SqliteTimelineQueryService.cs" />
   </ItemGroup>
 
 </Project>

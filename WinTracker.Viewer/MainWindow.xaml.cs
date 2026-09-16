@@ -25,6 +25,7 @@ public sealed partial class MainWindow : Window
     private const double BucketTrackWidth = 760.0;
     private const double DailyTrackWidth = 960.0;
     private const int TopAppCount = 8;
+    private static readonly bool DemoMode = Environment.GetCommandLineArgs().Contains("--demo", StringComparer.OrdinalIgnoreCase);
     private const int DailyBucketMinutes = 5;
     private const int MinWindowWidth = 1100;
     private const int MinWindowHeight = 700;
@@ -56,6 +57,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        if (DemoMode) Title = "WinTracker — DEMO (synthetic data)";
         SystemBackdrop = new MicaBackdrop();
         ConfigureWindowSizing();
         UpdateTimeTickLabels();
@@ -209,7 +211,7 @@ public sealed partial class MainWindow : Window
 
             (_timelineRows, _activeIntervals, _stateIntervals) = await Task.Run(() =>
             {
-                using var query = new SqliteTimelineQueryService(dbPath);
+                using var query = new SqliteTimelineQueryService(dbPath, includeDemo: DemoMode);
                 return (
                     query.QueryTimeline(_currentWindow),
                     query.QueryActiveIntervals(_currentWindow),
@@ -236,7 +238,7 @@ public sealed partial class MainWindow : Window
             RebuildOverviewLegend();
             RebuildAppLegend();
 
-            StatusTextBlock.Text = $"Loaded: {GetRangeLabel()} / events={_timelineRows.Count}";
+            StatusTextBlock.Text = $"{(DemoMode ? "DEMO / " : "")}Loaded: {GetRangeLabel()} / intervals={_stateIntervals.Count}";
         }
         catch (OperationCanceledException)
         {
@@ -350,7 +352,7 @@ public sealed partial class MainWindow : Window
     private static string ResolveDatabasePath()
     {
         (string root, string settingsPath) = AppStorage.Resolve();
-        return AppStorage.DatabasePath(root, CollectorSettingsLoader.Load(settingsPath));
+        return AppStorage.DatabasePath(root, CollectorSettingsLoader.Load(settingsPath), demo: DemoMode);
     }
 
     private void BuildDailyOverviewRows()

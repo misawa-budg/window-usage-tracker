@@ -11,17 +11,22 @@ internal static class DummySeedConsole
         Minute
     }
 
-    public static bool TryHandle(string[] args, CollectorSettings settings, string baseDirectory)
+    public static bool TryHandle(string[] args, CollectorSettings settings, string baseDirectory, bool demoMode = false)
     {
         if (args.Length == 0 || !string.Equals(args[0], "seed", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
+        if (!demoMode)
+        {
+            Console.Error.WriteLine("Seeding requires --demo. Real usage data will not be modified.");
+            return true;
+        }
+
         string range = "24h";
         SeedProfile profile = SeedProfile.Hourly;
         bool replace = false;
-        bool replaceAll = false;
 
         for (int i = 1; i < args.Length; i++)
         {
@@ -58,12 +63,6 @@ internal static class DummySeedConsole
                 continue;
             }
 
-            if (string.Equals(arg, "--replace-all", StringComparison.OrdinalIgnoreCase))
-            {
-                replaceAll = true;
-                continue;
-            }
-
             PrintUsage();
             return true;
         }
@@ -76,13 +75,9 @@ internal static class DummySeedConsole
             ? (dayStartLocal.AddDays(-6).ToUniversalTime(), dayStartLocal.AddDays(1).ToUniversalTime())
             : (dayStartLocal.ToUniversalTime(), dayStartLocal.AddDays(1).ToUniversalTime());
 
-        if (replaceAll)
+        if (replace)
         {
-            DeleteRows(sqlitePath, fromUtc, toUtc, seededOnly: false);
-        }
-        else if (replace)
-        {
-            DeleteRows(sqlitePath, fromUtc, toUtc, seededOnly: true);
+            DeleteRows(sqlitePath, fromUtc, toUtc);
         }
 
         IReadOnlyList<AppEvent> events = BuildEvents(fromUtc, toUtc, profile);
@@ -93,7 +88,7 @@ internal static class DummySeedConsole
         }
 
         Console.WriteLine(
-            $"Seed completed: rows={events.Count}, range={range}, profile={profile.ToString().ToLowerInvariant()}, replace={replace}, replaceAll={replaceAll}, db={sqlitePath}");
+            $"DEMO seed completed: rows={events.Count}, range={range}, profile={profile.ToString().ToLowerInvariant()}, replace={replace}, db={sqlitePath}");
         return true;
     }
 
@@ -256,7 +251,7 @@ internal static class DummySeedConsole
             Source: SeedSource);
     }
 
-    private static void DeleteRows(string sqlitePath, DateTimeOffset fromUtc, DateTimeOffset toUtc, bool seededOnly)
+    private static void DeleteRows(string sqlitePath, DateTimeOffset fromUtc, DateTimeOffset toUtc)
     {
         string? directoryPath = Path.GetDirectoryName(sqlitePath);
         if (!string.IsNullOrWhiteSpace(directoryPath))
@@ -264,7 +259,10 @@ internal static class DummySeedConsole
             Directory.CreateDirectory(directoryPath);
         }
 
-        using var connection = new SqliteConnection($"Data Source={sqlitePath};Mode=ReadWriteCreate;Cache=Shared");
+        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = sqlitePath, Mode = SqliteOpenMode.ReadWriteCreate, Cache = SqliteCacheMode.Shared
+        }.ToString());
         connection.Open();
 
         using var command = connection.CreateCommand();
@@ -286,9 +284,8 @@ internal static class DummySeedConsole
             DELETE FROM app_events
             WHERE state_end_utc > $from_utc
               AND state_start_utc < $to_utc
-              AND ($seed_only = 0 OR source = $source);
+              AND source = $source;
             """;
-        command.Parameters.AddWithValue("$seed_only", seededOnly ? 1 : 0);
         command.Parameters.AddWithValue("$source", SeedSource);
         command.Parameters.AddWithValue("$from_utc", fromUtc.ToString("O"));
         command.Parameters.AddWithValue("$to_utc", toUtc.ToString("O"));
@@ -297,7 +294,7 @@ internal static class DummySeedConsole
 
     private static void PrintUsage()
     {
-        Console.WriteLine("Usage: dotnet run --project .\\WinTracker.Collector\\WinTracker.Collector.csproj -- seed [24h|1week] [hourly|mixed|minute] [--profile <hourly|mixed|minute>] [--replace] [--replace-all]");
+        Console.WriteLine("Usage: dotnet run --project .\\WinTracker.Collector\\WinTracker.Collector.csproj -- seed [24h|1week] [hourly|mixed|minute] --demo [--replace]");
     }
 
     private static bool TryParseProfile(string value, out SeedProfile profile)

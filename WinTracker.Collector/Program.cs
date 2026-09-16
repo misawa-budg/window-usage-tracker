@@ -9,6 +9,14 @@ if (args.Length == 1 && string.Equals(args[0], "--stop", StringComparison.Ordina
 
 (string appRootPath, string settingsPath) = AppStorage.Resolve();
 CollectorSettings settings = CollectorSettingsLoader.Load(settingsPath);
+bool demoMode = args.Contains("--demo", StringComparer.OrdinalIgnoreCase);
+args = args.Where(arg => !string.Equals(arg, "--demo", StringComparison.OrdinalIgnoreCase)).ToArray();
+if (demoMode)
+{
+    if (args.Length == 0 || (args[0] != "seed" && args[0] != "report"))
+        throw new ArgumentException("--demo is supported for seed/report, not live collection.");
+    settings = settings with { SqliteFilePath = AppStorage.DatabasePath(appRootPath, settings, demo: true) };
+}
 bool runBackground = args.Any(x => string.Equals(x, "--background", StringComparison.OrdinalIgnoreCase));
 
 if (runBackground)
@@ -16,12 +24,12 @@ if (runBackground)
     HideConsoleWindow();
 }
 
-if (DummySeedConsole.TryHandle(args, settings, appRootPath))
+if (DummySeedConsole.TryHandle(args, settings, appRootPath, demoMode))
 {
     return;
 }
 
-if (UsageReportConsole.TryHandle(args, settings, appRootPath))
+if (UsageReportConsole.TryHandle(args, settings, appRootPath, demoMode))
 {
     return;
 }

@@ -5,12 +5,16 @@ namespace WinTracker.Viewer;
 
 internal sealed class SqliteTimelineQueryService : IDisposable
 {
-    private const string SeedSource = "demo-seed";
     private readonly SqliteConnection _connection;
+    private readonly bool _includeDemo;
 
-    public SqliteTimelineQueryService(string databasePath)
+    public SqliteTimelineQueryService(string databasePath, bool includeDemo = false)
     {
-        _connection = new SqliteConnection($"Data Source={databasePath};Mode=ReadOnly;Cache=Shared");
+        _includeDemo = includeDemo;
+        _connection = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath, Mode = SqliteOpenMode.ReadOnly, Cache = SqliteCacheMode.Shared
+        }.ToString());
         _connection.Open();
     }
 
@@ -39,6 +43,7 @@ internal sealed class SqliteTimelineQueryService : IDisposable
                 FROM app_events
                 WHERE state_end_utc > $from_utc
                   AND state_start_utc < $to_utc
+                  AND ($include_demo = 1 OR source <> 'demo-seed')
             ),
             overlaps AS (
                 SELECT
@@ -65,7 +70,6 @@ internal sealed class SqliteTimelineQueryService : IDisposable
 
         BindWindow(command, window);
         command.Parameters.AddWithValue("$bucket_seconds", window.BucketSeconds);
-        command.Parameters.AddWithValue("$excluded_source", SeedSource);
 
         var rows = new List<TimelineUsageRow>();
         using SqliteDataReader reader = command.ExecuteReader();
@@ -95,6 +99,7 @@ internal sealed class SqliteTimelineQueryService : IDisposable
             WHERE state = 'Active'
               AND state_end_utc > $from_utc
               AND state_start_utc < $to_utc
+                  AND ($include_demo = 1 OR source <> 'demo-seed')
             ORDER BY state_start_utc ASC;
             """;
 
@@ -133,6 +138,7 @@ internal sealed class SqliteTimelineQueryService : IDisposable
             FROM app_events
             WHERE state_end_utc > $from_utc
               AND state_start_utc < $to_utc
+                  AND ($include_demo = 1 OR source <> 'demo-seed')
             ORDER BY state_start_utc ASC;
             """;
 
@@ -159,8 +165,9 @@ internal sealed class SqliteTimelineQueryService : IDisposable
         return rows;
     }
 
-    private static void BindWindow(SqliteCommand command, UsageQueryWindow window)
+    private void BindWindow(SqliteCommand command, UsageQueryWindow window)
     {
+        command.Parameters.AddWithValue("$include_demo", _includeDemo ? 1 : 0);
         command.Parameters.AddWithValue("$from_utc", window.FromUtc.ToString("O"));
         command.Parameters.AddWithValue("$to_utc", window.ToUtc.ToString("O"));
     }
