@@ -2,9 +2,9 @@
 param(
     [string]$Configuration = "Release",
     [string]$Runtime = "win-x64",
-    [string]$OutputRoot = "artifacts",
+    [string]$OutputRoot = ("artifacts/release-{0}" -f (Get-Date -Format "yyyyMMdd-HHmmss")),
     [switch]$NoZip,
-    [bool]$StopRunningApps = $true
+    [bool]$StopRunningApps = $false
 )
 
 Set-StrictMode -Version Latest
@@ -34,39 +34,6 @@ function Invoke-WithRetry {
     }
 }
 
-function Stop-WinTrackerProcessesUnderPath {
-    param(
-        [Parameter(Mandatory = $true)][string]$RootPath
-    )
-
-    if (-not (Test-Path $RootPath)) {
-        return
-    }
-
-    $resolvedRoot = (Resolve-Path $RootPath).Path.TrimEnd('\') + '\'
-    $targetNames = @("WinTracker.Viewer", "WinTracker.Collector")
-    $processes = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -in $targetNames }
-
-    foreach ($process in $processes) {
-        $exePath = $null
-        try {
-            $exePath = $process.MainModule.FileName
-        }
-        catch {
-            continue
-        }
-
-        if ([string]::IsNullOrWhiteSpace($exePath)) {
-            continue
-        }
-
-        if ($exePath.StartsWith($resolvedRoot, [StringComparison]::OrdinalIgnoreCase)) {
-            Write-Host "Stopping process: $($process.ProcessName) (PID=$($process.Id))"
-            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-        }
-    }
-}
-
 function Invoke-DotNetPublish {
     param(
         [Parameter(Mandatory = $true)][string]$ProjectPath,
@@ -75,14 +42,8 @@ function Invoke-DotNetPublish {
         [string[]]$ExtraMsbuildProps = @()
     )
 
-    if (Test-Path $PublishDir) {
-        if ($StopRunningApps) {
-            Stop-WinTrackerProcessesUnderPath -RootPath $PublishDir
-        }
-
-        Invoke-WithRetry `
-            -Description "Remove publish directory $PublishDir" `
-            -Action { Remove-Item -Path $PublishDir -Recurse -Force }
+    if (Test-Path -LiteralPath $PublishDir) {
+        throw "Refusing to overwrite existing directory: $PublishDir. Choose a new OutputRoot."
     }
 
     $selfContainedValue = if ($SelfContained) { "true" } else { "false" }
@@ -119,6 +80,7 @@ function Invoke-DotNetBuildViewer {
     param(
         [Parameter(Mandatory = $true)][string]$ProjectPath,
         [Parameter(Mandatory = $true)][string]$RuntimeIdentifier,
+        [Parameter(Mandatory = $true)][string]$BuildOutputDir,
         [Parameter(Mandatory = $true)][bool]$SelfContained,
         [string[]]$ExtraMsbuildProps = @()
     )
@@ -133,6 +95,7 @@ function Invoke-DotNetBuildViewer {
         $Configuration
         "-r"
         $RuntimeIdentifier
+        "-p:OutDir=$BuildOutputDir\\"
         "--self-contained"
         $selfContainedValue
     )
@@ -161,14 +124,8 @@ function Copy-DirectoryContents {
         throw "Source directory not found: $SourceDir"
     }
 
-    if (Test-Path $DestinationDir) {
-        if ($StopRunningApps) {
-            Stop-WinTrackerProcessesUnderPath -RootPath $DestinationDir
-        }
-
-        Invoke-WithRetry `
-            -Description "Remove directory $DestinationDir" `
-            -Action { Remove-Item -Path $DestinationDir -Recurse -Force }
+    if (Test-Path -LiteralPath $DestinationDir) {
+        throw "Refusing to overwrite existing directory: $DestinationDir. Choose a new OutputRoot."
     }
 
     New-Item -Path $DestinationDir -ItemType Directory -Force | Out-Null
@@ -183,14 +140,8 @@ function New-ZipPackage {
         [Parameter(Mandatory = $true)][string]$ZipPath
     )
 
-    if ($StopRunningApps) {
-        Stop-WinTrackerProcessesUnderPath -RootPath $SourceDir
-    }
-
-    if (Test-Path $ZipPath) {
-        Invoke-WithRetry `
-            -Description "Remove existing zip $ZipPath" `
-            -Action { Remove-Item -Path $ZipPath -Force }
+    if (Test-Path -LiteralPath $ZipPath) {
+        throw "Refusing to overwrite existing archive: $ZipPath"
     }
 
     Invoke-WithRetry `
@@ -218,14 +169,8 @@ function New-PortableBundle {
 
     $bundleName = "window-usage-tracker-portable-{0}-{1}" -f $RuntimeIdentifier, $ModeSuffix
     $bundleDir = Join-Path $ResolvedOutputRoot $bundleName
-    if (Test-Path $bundleDir) {
-        if ($StopRunningApps) {
-            Stop-WinTrackerProcessesUnderPath -RootPath $bundleDir
-        }
-
-        Invoke-WithRetry `
-            -Description "Remove existing portable bundle directory $bundleDir" `
-            -Action { Remove-Item -Path $bundleDir -Recurse -Force }
+    if (Test-Path -LiteralPath $bundleDir) {
+        throw "Refusing to overwrite existing directory: $bundleDir. Choose a new OutputRoot."
     }
 
     New-Item -Path $bundleDir -ItemType Directory -Force | Out-Null
@@ -241,6 +186,7 @@ function New-PortableBundle {
     $collectorLauncher = @(
         "@echo off"
         "setlocal"
+        "set ""WINTRACKER_HOME=%~dp0"""
         "cd /d ""%~dp0"""
         ".\collector\WinTracker.Collector.exe"
     )
@@ -249,10 +195,30 @@ function New-PortableBundle {
     $viewerLauncher = @(
         "@echo off"
         "setlocal"
+        "set ""WINTRACKER_HOME=%~dp0"""
         "cd /d ""%~dp0"""
         "start """" .\viewer\WinTracker.Viewer.exe"
     )
     Set-Content -Path (Join-Path $bundleDir "Run-Viewer.cmd") -Value $viewerLauncher -Encoding ASCII
+
+    $stopLauncher = @(
+        "@echo off"
+        "cd /d ""%~dp0"""
+        ".\collector\WinTracker.Collector.exe --stop"
+        "pause"
+    )
+    Set-Content -Path (Join-Path $bundleDir "Stop-Collector.cmd") -Value $stopLauncher -Encoding ASCII
+
+    $demoLauncher = @(
+        "@echo off"
+        "setlocal"
+        "set ""WINTRACKER_HOME=%~dp0"""
+        "cd /d ""%~dp0"""
+        ".\collector\WinTracker.Collector.exe seed 1week mixed --demo --replace"
+        "if errorlevel 1 exit /b %errorlevel%"
+        "start """" .\viewer\WinTracker.Viewer.exe --demo"
+    )
+    Set-Content -Path (Join-Path $bundleDir "Run-Demo.cmd") -Value $demoLauncher -Encoding ASCII
 
     if (-not $NoZip) {
         $zipPath = Join-Path $ResolvedOutputRoot ("{0}.zip" -f $bundleName)
@@ -261,7 +227,12 @@ function New-PortableBundle {
 }
 
 $repoRoot = $PSScriptRoot
-$resolvedOutputRoot = Join-Path $repoRoot $OutputRoot
+$resolvedOutputRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot $OutputRoot))
+if ($StopRunningApps) { throw "Automatic process termination is disabled. Stop the collector gracefully with --stop." }
+if ((Test-Path -LiteralPath $resolvedOutputRoot) -and
+    (Get-ChildItem -LiteralPath $resolvedOutputRoot -Force | Select-Object -First 1)) {
+    throw "OutputRoot is not empty. Existing packages and usage data will not be overwritten: $resolvedOutputRoot"
+}
 New-Item -Path $resolvedOutputRoot -ItemType Directory -Force | Out-Null
 
 $targets = @(
@@ -292,13 +263,14 @@ foreach ($target in $targets) {
         }
 
         if ($target.Name -eq "viewer") {
+            $viewerBuildOutput = Join-Path $resolvedOutputRoot ("_build/viewer-{0}" -f $mode.Suffix)
             Invoke-DotNetBuildViewer `
                 -ProjectPath $target.Project `
                 -RuntimeIdentifier $Runtime `
+                -BuildOutputDir $viewerBuildOutput `
                 -SelfContained $mode.SelfContained `
                 -ExtraMsbuildProps $extraProps
 
-            $viewerBuildOutput = Join-Path $repoRoot "WinTracker.Viewer\bin\$Configuration\net8.0-windows10.0.19041.0\$Runtime"
             Copy-DirectoryContents -SourceDir $viewerBuildOutput -DestinationDir $publishDir
         }
         else {
