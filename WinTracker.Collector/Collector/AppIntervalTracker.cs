@@ -1,26 +1,28 @@
 // Only the collector loop accesses this state and its writer.
 internal sealed class AppIntervalTracker(IAppEventWriter writer)
 {
-    private readonly Dictionary<string, AppInterval> _intervals = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, TrackedInterval> _intervals = new(StringComparer.OrdinalIgnoreCase);
+
+    // An ongoing interval has a start and the latest snapshot, but no final end yet.
+    private readonly record struct TrackedInterval(DateTimeOffset StartUtc, AppSnapshot Snapshot);
 
     public void ApplySnapshot(IReadOnlyDictionary<string, AppSnapshot> current, DateTimeOffset now, string source)
     {
         foreach ((string key, AppSnapshot snapshot) in current)
         {
-            if (_intervals.TryGetValue(key, out AppInterval existing))
+            if (_intervals.TryGetValue(key, out TrackedInterval existing))
             {
-                if (existing.State == snapshot.State)
+                if (existing.Snapshot.State == snapshot.State)
                 {
                     _intervals[key] = existing with
                     {
-                        StateEndUtc = now, Pid = snapshot.Pid, Hwnd = snapshot.Hwnd, Title = snapshot.Title
+                        Snapshot = snapshot with { ExeName = existing.Snapshot.ExeName }
                     };
                     continue;
                 }
                 Write(existing, now, source);
             }
-            _intervals[key] = new AppInterval(now, now, snapshot.ExeName, snapshot.Pid,
-                snapshot.Hwnd, snapshot.Title, snapshot.State);
+            _intervals[key] = new TrackedInterval(now, snapshot);
         }
         foreach (string key in _intervals.Keys.Except(current.Keys, StringComparer.OrdinalIgnoreCase).ToArray())
         {
@@ -33,18 +35,19 @@ internal sealed class AppIntervalTracker(IAppEventWriter writer)
     {
         foreach (string key in _intervals.Keys.ToArray())
         {
-            AppInterval interval = _intervals[key];
+            TrackedInterval interval = _intervals[key];
             Write(interval, now, source);
-            _intervals[key] = interval with { StateStartUtc = now, StateEndUtc = now };
+            _intervals[key] = interval with { StartUtc = now };
         }
         writer.Flush();
         if (close) _intervals.Clear();
     }
 
-    private void Write(AppInterval interval, DateTimeOffset end, string source)
+    private void Write(TrackedInterval interval, DateTimeOffset end, string source)
     {
-        if (end <= interval.StateStartUtc) return;
-        writer.Write(new AppEvent(interval.StateStartUtc, end, interval.ExeName, interval.Pid,
-            interval.Hwnd, interval.Title, interval.State, source));
+        if (end <= interval.StartUtc) return;
+        AppSnapshot snapshot = interval.Snapshot;
+        writer.Write(new AppEvent(interval.StartUtc, end, snapshot.ExeName, snapshot.Pid,
+            snapshot.Hwnd, snapshot.Title, snapshot.State, source));
     }
 }

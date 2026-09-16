@@ -9,6 +9,26 @@ public sealed class CollectorPersistenceTests
     internal static readonly DateTimeOffset Start = new(2026, 9, 16, 0, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public void UnchangedStateKeepsItsStartAndIdentityButUpdatesWindowMetadata()
+    {
+        var writer = new RecordingWriter();
+        var tracker = new AppIntervalTracker(writer);
+        tracker.ApplySnapshot(Snapshot("Open"), Start, "test");
+        var updated = Snapshot("Open");
+        updated["editor.exe"] = new("EDITOR.exe", 2, "0x2", "new title", "Open");
+        tracker.ApplySnapshot(updated, Start.AddSeconds(5), "test");
+        Assert.Empty(writer.Events);
+        tracker.Checkpoint(Start.AddSeconds(15), "checkpoint");
+        var saved = Assert.Single(writer.Events);
+        Assert.Equal(Start, saved.StateStartUtc);
+        Assert.Equal(Start.AddSeconds(15), saved.StateEndUtc);
+        Assert.Equal("editor.exe", saved.ExeName);
+        Assert.Equal(2u, saved.Pid);
+        Assert.Equal("0x2", saved.Hwnd);
+        Assert.Equal("new title", saved.Title);
+    }
+
+    [Fact]
     public void CheckpointsPersistUnchangedStateWithoutGapsOrOverlap()
     {
         var writer = new RecordingWriter();
