@@ -593,6 +593,7 @@
                                                 x:Name="AppComboBox"
                                                 Grid.Column="6"
                                                 MinHeight="40"
+                                                DisplayMemberPath="DisplayName"
                                                 SelectionChanged="OnAppSelectionChanged" />
                                         </Grid>
                                     </Border>

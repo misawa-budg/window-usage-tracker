@@ -39,7 +39,7 @@ public sealed partial class MainWindow : Window
     private readonly ObservableCollection<StateStackRowViewModel> _overviewDailyRows = [];
     private readonly ObservableCollection<StateLaneViewModel> _appDailyLanes = [];
     private readonly ObservableCollection<TimelineRowViewModel> _appRows = [];
-    private readonly ObservableCollection<string> _appNames = [];
+    private readonly ObservableCollection<AppChoice> _appNames = [];
     private readonly ObservableCollection<LegendItemViewModel> _overviewLegendItems = [];
     private readonly ObservableCollection<LegendItemViewModel> _appLegendItems = [];
     private readonly TimelineLayoutBuilder _layoutBuilder = new(topAppCount: TopAppCount);
@@ -429,13 +429,13 @@ public sealed partial class MainWindow : Window
 
     private void RebuildAppNames()
     {
-        string? current = AppComboBox.SelectedItem as string;
+        string? current = (AppComboBox.SelectedItem as AppChoice)?.ExeName;
         IReadOnlyList<string> appNames = _layoutBuilder.BuildAppNames(_stateIntervals);
 
         _appNames.Clear();
         foreach (string app in appNames)
         {
-            _appNames.Add(app);
+            _appNames.Add(new AppChoice(app));
         }
 
         if (_appNames.Count == 0)
@@ -444,9 +444,9 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (current is not null && _appNames.Contains(current, StringComparer.OrdinalIgnoreCase))
+        if (current is not null && _appNames.Any(x => string.Equals(x.ExeName, current, StringComparison.OrdinalIgnoreCase)))
         {
-            AppComboBox.SelectedItem = _appNames.First(x => string.Equals(x, current, StringComparison.OrdinalIgnoreCase));
+            AppComboBox.SelectedItem = _appNames.First(x => string.Equals(x.ExeName, current, StringComparison.OrdinalIgnoreCase));
             return;
         }
 
@@ -461,7 +461,7 @@ public sealed partial class MainWindow : Window
         {
             _overviewLegendItems.Add(new LegendItemViewModel(
                 CreateBrush(item.ColorHex),
-                item.Label));
+                AppChoice.FormatDisplayName(item.Label)));
         }
     }
 
@@ -494,7 +494,7 @@ public sealed partial class MainWindow : Window
         foreach (StateLaneLayout lane in lanes)
         {
             _appDailyLanes.Add(new StateLaneViewModel(
-                lane.Label,
+                AppChoice.FormatDisplayName(lane.Label),
                 lane.TotalLabel,
                 lane.Segments.Select(ToAbsoluteSegmentViewModel).ToList()));
         }
@@ -503,7 +503,7 @@ public sealed partial class MainWindow : Window
     private void BuildWeeklyAppRows()
     {
         _appDailyLanes.Clear();
-        string? app = AppComboBox.SelectedItem as string;
+        string? app = (AppComboBox.SelectedItem as AppChoice)?.ExeName;
 
         if (string.IsNullOrWhiteSpace(app))
         {
