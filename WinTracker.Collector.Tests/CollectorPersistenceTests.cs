@@ -54,6 +54,16 @@ public sealed class CollectorPersistenceTests
         await Assert.ThrowsAsync<IOException>(() => run.WaitAsync(TimeSpan.FromSeconds(2)));
     }
 
+    [Fact]
+    public void NativeSqliteVersionIsAtLeastThePinnedSecurityUpdate()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT sqlite_version()";
+        Assert.True(Version.Parse((string)command.ExecuteScalar()!) >= new Version(3, 53, 3));
+    }
+
     [Theory]
     [InlineData(false, "")]
     [InlineData(true, "private title")]
