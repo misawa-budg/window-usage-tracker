@@ -23,7 +23,7 @@ iPhoneのスクリーンタイムのように、使ったアプリをタイム�
 - Minimized: 代表ウィンドウが最小化されているアプリ
 - Open: `Active` ではなく `Minimized` でもないアプリ（ウィンドウとして存在）
 
-判定優先順位は `Active > Minimized > Open` とする。
+判定優先順位は `Active > Open > Minimized` とする。前面ウィンドウがなく、追跡対象がすべて最小化されているときだけアプリをMinimizedとする。規則はSharedのAppStatePriorityに集約し、Viewerの重複区間解決とも共有する。旧Collectorの過去データは書き換えない。
 
 補足:
 - システム全体では、`Active` は同時刻に原則1つ（foreground windowの性質）

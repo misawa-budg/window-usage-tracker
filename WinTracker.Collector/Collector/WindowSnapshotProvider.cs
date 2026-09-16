@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using WinTracker.Shared.Analytics;
 
 internal static class WindowSnapshotProvider
 {
@@ -123,7 +124,7 @@ internal static class WindowSnapshotProvider
         return true;
     }
 
-    private static void MergeByPriority(Dictionary<string, AppSnapshot> byApp, AppSnapshot candidate)
+    internal static void MergeByPriority(Dictionary<string, AppSnapshot> byApp, AppSnapshot candidate)
     {
         string key = candidate.ExeName;
         if (!byApp.TryGetValue(key, out AppSnapshot existing))
@@ -132,8 +133,8 @@ internal static class WindowSnapshotProvider
             return;
         }
 
-        int candidatePriority = GetStatePriority(candidate.State);
-        int existingPriority = GetStatePriority(existing.State);
+        int candidatePriority = AppStatePriority.Get(candidate.State);
+        int existingPriority = AppStatePriority.Get(existing.State);
         if (candidatePriority > existingPriority)
         {
             byApp[key] = candidate;
@@ -147,15 +148,6 @@ internal static class WindowSnapshotProvider
             byApp[key] = candidate;
         }
     }
-
-    private static int GetStatePriority(string state) =>
-        state switch
-        {
-            "Active" => 3,
-            "Minimized" => 2,
-            "Open" => 1,
-            _ => 0
-        };
 
     private static string GetExeName(uint pid, Dictionary<uint, string> cache)
     {

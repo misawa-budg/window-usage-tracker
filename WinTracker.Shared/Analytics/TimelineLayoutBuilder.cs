@@ -1266,7 +1266,7 @@ public sealed class TimelineLayoutBuilder
 
     private static int CompareStateIntervals(AppStateIntervalRow left, AppStateIntervalRow right)
     {
-        int order = StatePriority(right.State).CompareTo(StatePriority(left.State));
+        int order = AppStatePriority.Get(right.State).CompareTo(AppStatePriority.Get(left.State));
         if (order == 0) order = right.StateStartUtc.CompareTo(left.StateStartUtc);
         return order == 0 ? StringComparer.OrdinalIgnoreCase.Compare(left.State, right.State) : order;
     }
@@ -1275,26 +1275,6 @@ public sealed class TimelineLayoutBuilder
     {
         int order = right.StateStartUtc.CompareTo(left.StateStartUtc);
         return order == 0 ? StringComparer.OrdinalIgnoreCase.Compare(left.ExeName, right.ExeName) : order;
-    }
-
-    private static int StatePriority(string state)
-    {
-        if (string.Equals(state, "Active", StringComparison.OrdinalIgnoreCase))
-        {
-            return 3;
-        }
-
-        if (string.Equals(state, "Open", StringComparison.OrdinalIgnoreCase))
-        {
-            return 2;
-        }
-
-        if (string.Equals(state, "Minimized", StringComparison.OrdinalIgnoreCase))
-        {
-            return 1;
-        }
-
-        return 0;
     }
 
     private static void AddNoDataSegment(ICollection<SegmentLayout> segments, double width)
