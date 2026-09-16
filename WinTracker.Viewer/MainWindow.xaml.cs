@@ -200,6 +200,7 @@ public sealed partial class MainWindow : Window
 
     private async Task ReloadAsync()
     {
+        ReloadMeasurement? measurement = ReloadMeasurement.Start();
         _reloadCts?.Cancel();
         using var reloadCts = new CancellationTokenSource();
         _reloadCts = reloadCts;
@@ -224,6 +225,7 @@ public sealed partial class MainWindow : Window
                 using var query = new SqliteTimelineQueryService(dbPath, includeDemo: DemoMode);
                 return query.QueryStateIntervals(queryWindow);
             }, token);
+            measurement?.QueryCompleted();
             token.ThrowIfCancellationRequested();
             if (_isClosed) return;
             _stateIntervals = stateIntervals;
@@ -251,6 +253,8 @@ public sealed partial class MainWindow : Window
             RebuildAppLegend();
 
             StatusTextBlock.Text = $"{(DemoMode ? "DEMO / " : "")}Loaded: {GetRangeLabel()} / intervals={_stateIntervals.Count}";
+            if (measurement is not null)
+                await measurement.CompleteAsync((FrameworkElement)Content, GetRangeLabel(), _stateIntervals.Count, token);
         }
         catch (OperationCanceledException)
         {
