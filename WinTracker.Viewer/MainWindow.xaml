@@ -118,7 +118,7 @@
                         TextTrimming="CharacterEllipsis" />
                 </StackPanel>
             </DataTemplate>
-            <!-- Quarter-day ticks share the same label and total widths as the rows. -->
+            <!-- Interior tick labels span two quarter-day columns, centered on their shared boundary. -->
             <DataTemplate
                 x:Key="TimeAxisTemplate">
                 <Grid
@@ -138,15 +138,21 @@
                         Text="00:00"
                         Style="{StaticResource Caption}" />
                     <TextBlock
-                        Grid.Column="1"
+                        Grid.Column="0"
+                        Grid.ColumnSpan="2"
+                        HorizontalAlignment="Center"
                         Text="06:00"
                         Style="{StaticResource Caption}" />
                     <TextBlock
-                        Grid.Column="2"
+                        Grid.Column="1"
+                        Grid.ColumnSpan="2"
+                        HorizontalAlignment="Center"
                         Text="12:00"
                         Style="{StaticResource Caption}" />
                     <TextBlock
-                        Grid.Column="3"
+                        Grid.Column="2"
+                        Grid.ColumnSpan="2"
+                        HorizontalAlignment="Center"
                         Text="18:00"
                         Style="{StaticResource Caption}" />
                     <TextBlock

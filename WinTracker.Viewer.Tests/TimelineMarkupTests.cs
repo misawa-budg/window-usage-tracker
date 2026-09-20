@@ -64,9 +64,34 @@ public sealed class TimelineMarkupTests
         Assert.Equal(4, columns.Length);
         Assert.All(columns, x => Assert.Equal("*", (string?)x.Attribute("Width")));
         var ticks = template.Descendants().Where(x => x.Name.LocalName == "TextBlock").ToArray();
-        Assert.Equal(new[] { "0", "1", "2", "3", "3" }, ticks.Select(x => (string?)x.Attribute("Grid.Column")));
+        Assert.Equal(new[] { "0", "0", "1", "2", "3" }, ticks.Select(x => (string?)x.Attribute("Grid.Column")));
         Assert.Equal(new[] { "00:00", "06:00", "12:00", "18:00", "24:00" }, ticks.Select(x => (string?)x.Attribute("Text")));
         Assert.All(ticks, x => Assert.Null(x.Attribute("Margin")));
         Assert.Equal("Right", (string?)ticks[^1].Attribute("HorizontalAlignment"));
+    }
+
+    [Theory]
+    [InlineData(375.5)]
+    [InlineData(720)]
+    [InlineData(1086)]
+    public void InteriorTickCentersMatchTimeGuidesAtAnyTrackWidth(double trackWidth)
+    {
+        var doc = Load();
+        var axis = doc.Descendants().Single(x => (string?)x.Attribute(Xaml + "Key") == "TimeAxisTemplate");
+        var guides = doc.Descendants().Single(x => (string?)x.Attribute(Xaml + "Key") == "TimeGuidesTemplate");
+        var ticks = axis.Descendants().Where(x => (string?)x.Attribute("Text") is "06:00" or "12:00" or "18:00").ToArray();
+        var lines = guides.Descendants().Where(x => x.Name.LocalName == "Border").ToArray();
+        Assert.Equal(3, ticks.Length);
+        Assert.Equal(3, lines.Length);
+        for (int i = 0; i < ticks.Length; i++)
+        {
+            Assert.Equal("Center", (string?)ticks[i].Attribute("HorizontalAlignment"));
+            Assert.Equal("2", (string?)ticks[i].Attribute("Grid.ColumnSpan"));
+            double center = ((int)ticks[i].Attribute("Grid.Column")! + 1) * trackWidth / 4;
+            double line = (int)lines[i].Attribute("Grid.Column")! * trackWidth / 4;
+            Assert.Equal(line, center, precision: 6);
+        }
+        Assert.Equal(2, doc.Descendants().Count(x =>
+            (string?)x.Attribute("ContentTemplate") == "{StaticResource TimeAxisTemplate}"));
     }
 }
