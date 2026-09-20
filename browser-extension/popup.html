@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<title>WinTracker 接続診断</title>
+<style>
+  :root { color-scheme: dark light; font-family: system-ui, sans-serif; }
+  body { width: 370px; margin: 16px; font-size: 13px; }
+  h1 { font-size: 16px; margin: 0 0 12px; }
+  p { line-height: 1.6; }
+  textarea { box-sizing: border-box; width: 100%; height: 225px; padding: 10px; font: 12px/1.6 monospace; resize: vertical; }
+  button { padding: 6px 12px; margin: 8px 8px 0 0; font: inherit; }
+</style>
+<h1>WinTracker 接続診断</h1>
+<p id="hint" role="status">接続状態を取得中…</p>
+<textarea id="report" aria-label="診断結果（選択してコピーできます）" readonly spellcheck="false"></textarea>
+<button id="refresh" type="button">状態を更新</button>
+<button id="retry" type="button">再接続</button>
+<p>閲覧URL・タイトルは含みません。結果を選択してコピーできます。診断情報は拡張の再読み込みでリセットされます。</p>
+<script type="module" src="popup.js"></script>
+</html>

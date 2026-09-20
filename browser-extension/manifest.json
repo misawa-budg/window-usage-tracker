@@ -6,5 +6,5 @@
   "permissions": ["tabs", "nativeMessaging", "alarms"],
   "incognito": "not_allowed",
   "background": { "service_worker": "background.js", "type": "module" },
-  "action": { "default_title": "WinTracker: 接続待ち" }
+  "action": { "default_title": "WinTracker: 接続診断", "default_popup": "popup.html" }
 }
