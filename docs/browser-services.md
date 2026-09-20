@@ -1,4 +1,4 @@
-# ブラウザサービス記録（0.3.0-preview.1）
+# ブラウザサービス記録（v0.3.0）
 
 Edge / Chromeの前面ウィンドウで選択されたタブを、YouTube・Twitch・Gmail・GitHub・その他のWebに分類する任意機能です。拡張のインストールと `enableBrowserTracking: true` の両方が必要です。既定では無効。公開済みv0.2.0にはこの機能はありません。
 
@@ -26,6 +26,12 @@ Edge / Chromeの前面ウィンドウで選択されたタブを、YouTube・Twi
 ```
 
 Chromeは `-Browser Chrome` に置換します。EdgeとChromeでIDが異なる場合は、それぞれのIDで登録します。スクリプトは別インストールの登録を無断で上書きしません。
+
+「スクリプトの実行が無効」と出る場合は、管理者権限ではなくPowerShellの実行ポリシーを確認します。`Get-ExecutionPolicy -List` で `MachinePolicy` / `UserPolicy` が設定されている場合は組織の管理方針に従ってください。管理ポリシーがなく、配布元とスクリプト内容を確認できた場合は、次のように今回のプロセスだけ実行を許可できます。PC全体やユーザーの恒久設定は変更しません。
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Register-BrowserHost.ps1 -Browser Edge -HostExecutable .\browser-host\WinTracker.BrowserHost.exe -ExtensionId '拡張画面に表示された32文字のID'
+```
 
 4. 旧Collectorを `Stop-Collector.cmd` で正常停止し、旧フォルダ・DB・設定をバックアップします。新フォルダへ `data` と `collector.settings.json` を移行し、その設定に `"enableBrowserTracking": true` を追加します。`storeWindowTitles` はfalseを推奨。自動起動設定がある場合は起動先も確認してください。Collectorは同時に1つだけ起動します。
 5. 新Collectorを起動し、拡張を再読み込みします。拡張ボタンのツールチップで接続状態を確認できます。「!」は接続待ちです。ブラウザ内でサービスを切り替え、保存周期（既定15秒）後にViewerを更新します。Viewer自体はこの版でもデータを自動再読込しません。

@@ -74,6 +74,6 @@
 追跡途中の区間は `AppIntervalTracker` 内部の「開始時刻＋最新AppSnapshot」で表す。確定前の終了時刻は保持せず、書込時にAppEventへ変換する。SQLiteに保存済みの区間やスキーマを変える整理ではない。
 
 ## 関連ドキュメント
-- ブラウザサービス連携: `docs/browser-services.md`（0.3.0-preview.1）
+- ブラウザサービス連携: `docs/browser-services.md`（v0.3.0）
 - Collector要件: `docs/requirements_collector.md`
 - Viewer要件: `docs/requirements_viewer.md`

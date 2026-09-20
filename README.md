@@ -4,7 +4,7 @@ Windows 11 向けの軽量なアプリケーション利用時間トラッカー
 `Collector` がアプリ状態（`Active / Open / Minimized`）を SQLite に自動蓄積し、`Viewer` が 24h / 1week のタイムラインで時間の使い方を可視化します。  
 `Active` は Windows の foreground 特性上、同時刻に原則1アプリです。
 
-開発版 **0.3.0-preview.1** では、Edge／Chromeの前面タブをYouTube・Twitch・Gmail・GitHub等のサービス単位で表示する任意機能を追加しています。ブラウザ拡張＋ローカルホストの導入が必要で、既定では収集無効です。URLやタイトルは保存しません。[導入手順・プライバシー・検証範囲](docs/browser-services.md)を先に確認してください。公開済みv0.2.0には含まれません。
+**v0.3.0** では、Edge／Chromeの前面タブをYouTube・Twitch・Gmail・GitHub等のサービス単位で表示する任意機能を追加しています。ブラウザ拡張＋ローカルホストの導入が必要で、既定では収集無効です。URLやタイトルは保存しません。[導入手順・プライバシー・検証範囲](docs/browser-services.md)を先に確認してください。v0.2.0には含まれません。
 
 ## 構成
 
