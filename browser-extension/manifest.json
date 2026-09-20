@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "WinTracker Browser Services",
+  "version": "0.1.0",
+  "description": "Record foreground services locally with WinTracker. No page content, titles or full URLs are stored.",
+  "permissions": ["tabs", "nativeMessaging", "alarms"],
+  "incognito": "not_allowed",
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_title": "WinTracker: 接続待ち" }
+}
