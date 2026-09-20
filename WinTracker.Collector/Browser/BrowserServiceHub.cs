@@ -16,6 +16,7 @@ internal sealed class BrowserServiceHub : IAsyncDisposable
     private readonly string _pipeName;
     private readonly Task _acceptLoop;
     private readonly Task _refreshLoop;
+    private string? _publishedService;
 
     public BrowserServiceHub(Action changed, Func<BrowserForeground> foreground, string? pipeName = null)
     {
@@ -33,12 +34,13 @@ internal sealed class BrowserServiceHub : IAsyncDisposable
             if (!_state.SetForeground(_foreground())) return;
             foreach (Client client in _clients.Values) Probe(client);
         }
-        _changed();
+        PublishChange();
     }
 
     public void Reset()
     {
         lock (_gate) _state.Reset();
+        PublishChange();
     }
 
     public string? GetService(AppSnapshot app, DateTimeOffset now)
@@ -51,6 +53,17 @@ internal sealed class BrowserServiceHub : IAsyncDisposable
     {
         string? id = _state.BeginProbe(client.Id, client.Browser, DateTimeOffset.UtcNow);
         if (id is not null) client.Outgoing.Writer.TryWrite(new("probe", RequestId: id));
+    }
+
+    private void PublishChange()
+    {
+        lock (_gate)
+        {
+            string? service = _state.GetService(_state.Foreground, DateTimeOffset.UtcNow);
+            if (service == _publishedService) return;
+            _publishedService = service;
+        }
+        _changed();
     }
 
     private async Task AcceptAsync()
@@ -113,7 +126,7 @@ internal sealed class BrowserServiceHub : IAsyncDisposable
                             _state.Accept(client.Id, message.RequestId, message.Focused, message.ServiceId, DateTimeOffset.UtcNow);
                         else throw new InvalidDataException("Unexpected browser message.");
                     }
-                    _changed();
+                    PublishChange();
                 }
 
                 async Task SendAsync()
@@ -126,7 +139,7 @@ internal sealed class BrowserServiceHub : IAsyncDisposable
                     finally { lifetime.Cancel(); }
                 }
             }
-            catch (Exception error) when (error is IOException or JsonException or OperationCanceledException)
+            catch (Exception error) when (error is IOException or InvalidDataException or JsonException or OperationCanceledException)
             {
                 // Never log the message body (it is untrusted and could contain private text).
             }
@@ -138,7 +151,7 @@ internal sealed class BrowserServiceHub : IAsyncDisposable
                 if (client is not null)
                 {
                     lock (_gate) { _clients.Remove(client.Id); _state.ClientChanged(client.Id); }
-                    _changed();
+                    PublishChange();
                 }
             }
         }
@@ -146,17 +159,23 @@ internal sealed class BrowserServiceHub : IAsyncDisposable
 
     private async Task RefreshAsync()
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(10));
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        DateTimeOffset nextProbe = DateTimeOffset.UtcNow.AddSeconds(10);
         try
         {
             while (await timer.WaitForNextTickAsync(_stop.Token))
             {
                 lock (_gate)
                 {
-                    _state.SetForeground(_foreground());
-                    foreach (Client client in _clients.Values) Probe(client);
+                    if (_clients.Count != 0 && DateTimeOffset.UtcNow >= nextProbe)
+                    {
+                        _state.SetForeground(_foreground());
+                        foreach (Client client in _clients.Values) Probe(client);
+                        nextProbe = DateTimeOffset.UtcNow.AddSeconds(10);
+                    }
                 }
-                _changed(); // Expired/disconnected sources become unknown, never extrapolated indefinitely.
+                // A cheap lease check does not enumerate windows or trigger a scan when unchanged.
+                PublishChange();
             }
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested) { }

@@ -18,21 +18,18 @@ try
     using Stream output = Console.OpenStandardOutput();
     Task incoming = RelayAsync(input, pipe);
     Task outgoing = RelayAsync(pipe, output);
-    await Task.WhenAny(incoming, outgoing);
-    // Closing either side ends this connection, so a dead browser cannot retain a lease.
-    stop.Cancel();
-    pipe.Dispose();
-    input.Dispose();
-    output.Dispose();
-    try { await Task.WhenAll(incoming, outgoing); }
-    catch (Exception error) when (error is OperationCanceledException or ObjectDisposedException or IOException) { }
+    Task completed = await Task.WhenAny(incoming, outgoing);
+    await completed;
+    // Console stdin may be a blocking OS pipe that cannot cancel an in-flight read.
+    // Exit this relay process when either side ends, rather than waiting on stdin.
     return 0;
 }
-catch (Exception error) when (error is IOException or TimeoutException or JsonException or OperationCanceledException)
+catch (Exception error) when (error is IOException or InvalidDataException or TimeoutException or JsonException or OperationCanceledException)
 {
     Console.Error.WriteLine("WinTracker browser bridge disconnected. Check the Collector and browser tracking setting.");
     return 1;
 }
+finally { stop.Cancel(); }
 
 async Task RelayAsync(Stream source, Stream destination)
 {

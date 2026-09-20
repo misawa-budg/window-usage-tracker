@@ -10,7 +10,8 @@ internal sealed class BrowserServiceState
     private sealed record Probe(string Id, BrowserForeground Foreground, DateTimeOffset SentAt);
     private sealed record Observation(Guid Client, BrowserForeground Foreground, string Service, DateTimeOffset At);
     private readonly Dictionary<Guid, Probe> _pending = [];
-    private BrowserForeground _foreground;
+    private BrowserForeground _foreground = new("", "");
+    public BrowserForeground Foreground => _foreground;
     private Observation? _confirmed;
     private bool _conflicted;
     internal static readonly TimeSpan Lease = TimeSpan.FromSeconds(25);

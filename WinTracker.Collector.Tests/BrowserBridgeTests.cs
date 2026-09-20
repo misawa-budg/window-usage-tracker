@@ -83,6 +83,23 @@ public sealed class BrowserBridgeTests
     }
 
     [Fact]
+    public async Task BadClientDoesNotPreventASecondClientFromConnecting()
+    {
+        string name = "WinTracker-test-" + Guid.NewGuid().ToString("N");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+        await using var hub = new BrowserServiceHub(() => { }, () => Edge, name);
+        using (var bad = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous))
+        {
+            await bad.ConnectAsync(timeout.Token);
+            await bad.WriteAsync(BitConverter.GetBytes(4097), timeout.Token);
+        }
+        using var good = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
+        await good.ConnectAsync(timeout.Token);
+        await BrowserWire.WriteAsync(good, new("hello", Browser: "edge"), timeout.Token);
+        Assert.Equal("probe", (await BrowserWire.ReadAsync(good, timeout.Token))?.Kind);
+    }
+
+    [Fact]
     public async Task RealPipeExchangesProbesAndDropsDisconnectedClients()
     {
         string pipeName = "WinTracker-test-" + Guid.NewGuid().ToString("N");

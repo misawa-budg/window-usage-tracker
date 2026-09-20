@@ -17,8 +17,8 @@ for (const [url, expected] of [
   ["edge://newtab", null], [undefined, null], ["invalid", null]
 ]) test(`classification: ${url}`, () => assert.equal(classifyService(url), expected));
 
-function fake({ focused = true, incognito = false, discarded = false, moved = false, lostFocus = false, count = 1 } = {}) {
-  const tab = { id: 10, windowId: 20, active: true, incognito, discarded, url: "https://mail.google.com/mail/u/0" };
+function fake({ focused = true, incognito = false, discarded = false, moved = false, lostFocus = false, count = 1, splitViewId = -1 } = {}) {
+  const tab = { id: 10, windowId: 20, active: true, incognito, discarded, splitViewId, url: "https://mail.google.com/mail/u/0" };
   return {
     windows: {
       getLastFocused: async () => ({ id: 20, type: "normal", focused, incognito }),
@@ -35,7 +35,7 @@ test("reports service only for a focused selected tab", async () => {
   assert.equal(await readFocusedService(fake()), "gmail");
 });
 for (const options of [{ focused: false }, { incognito: true }, { discarded: true },
-  { moved: true }, { lostFocus: true }, { count: 0 }, { count: 2 }]) {
+  { moved: true }, { lostFocus: true }, { count: 0 }, { count: 2 }, { splitViewId: 12 }]) {
   test(`does not attribute ambiguous/background/private tab: ${JSON.stringify(options)}`, async () => {
     assert.equal(await readFocusedService(fake(options)), null);
   });
