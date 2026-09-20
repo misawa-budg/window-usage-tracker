@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="WinTracker.BrowserHost/WinTracker.BrowserHost.csproj" />
   <Project Path="WinTracker.Collector/WinTracker.Collector.csproj" />
   <Project Path="WinTracker.Collector.Tests/WinTracker.Collector.Tests.csproj" />
   <Project Path="WinTracker.Shared/WinTracker.Shared.csproj" />

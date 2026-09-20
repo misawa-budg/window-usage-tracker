@@ -12,8 +12,16 @@ internal static class ForegroundCollector
             SingleReader = true, SingleWriter = false, FullMode = BoundedChannelFullMode.Wait
         });
         int captureRequested = 1;
+        void RequestCapture()
+        {
+            Interlocked.Exchange(ref captureRequested, 1);
+            signals.Writer.TryWrite(CollectReason.WinEvent);
+        }
+        await using var browserHub = settings.EnableBrowserTracking
+            ? new BrowserServiceHub(RequestCapture, WindowSnapshotProvider.CaptureBrowserForeground) : null;
         using var hookPump = new WinEventHookPump(reason =>
         {
+            browserHub?.ForegroundChanged();
             Interlocked.Exchange(ref captureRequested, 1);
             signals.Writer.TryWrite(reason);
         }, error => signals.Writer.TryComplete(error));
@@ -25,9 +33,17 @@ internal static class ForegroundCollector
         try
         {
             await RunLoopAsync(signals.Reader, cancellationToken, eventWriter, settings,
-                () => WindowSnapshotProvider.CaptureCurrentStates(excluded),
+                () =>
+                {
+                    var snapshot = WindowSnapshotProvider.CaptureCurrentStates(excluded);
+                    if (browserHub is not null)
+                        foreach (string key in snapshot.Keys.ToArray())
+                            snapshot[key] = snapshot[key] with { ServiceId = browserHub.GetService(snapshot[key], DateTimeOffset.UtcNow) };
+                    return snapshot;
+                },
                 scanRequested: () => Interlocked.Exchange(ref captureRequested, 0) != 0,
-                sessionAvailable: SessionAvailability.IsInputDesktop);
+                sessionAvailable: SessionAvailability.IsInputDesktop,
+                observationInterrupted: () => browserHub?.Reset());
         }
         finally
         {
@@ -50,7 +66,8 @@ internal static class ForegroundCollector
     internal static async Task RunLoopAsync(ChannelReader<CollectReason> signals,
         CancellationToken cancellationToken, IAppEventWriter writer, CollectorSettings settings,
         Func<Dictionary<string, AppSnapshot>> capture, TimeProvider? clock = null,
-        Func<bool>? scanRequested = null, Func<bool>? sessionAvailable = null)
+        Func<bool>? scanRequested = null, Func<bool>? sessionAvailable = null,
+        Action? observationInterrupted = null)
     {
         clock ??= TimeProvider.System;
         var tracker = new AppIntervalTracker(writer);
@@ -67,6 +84,7 @@ internal static class ForegroundCollector
                 if (clockWentBackwards || now - lastObserved > TimeSpan.FromSeconds(settings.CheckpointIntervalSeconds * 2))
                 {
                     tracker.Checkpoint(lastObserved, "observation_gap", close: true);
+                    observationInterrupted?.Invoke();
                     lastScan = DateTimeOffset.MinValue;
                     lastCheckpoint = now;
                     if (clockWentBackwards) continue;
@@ -74,6 +92,7 @@ internal static class ForegroundCollector
                 if (sessionAvailable is not null && !sessionAvailable())
                 {
                     tracker.Checkpoint(lastObserved, "session_unavailable", close: true);
+                    observationInterrupted?.Invoke();
                     lastScan = DateTimeOffset.MinValue;
                     lastCheckpoint = lastObserved = now;
                     continue;

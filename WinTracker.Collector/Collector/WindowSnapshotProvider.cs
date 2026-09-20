@@ -8,6 +8,15 @@ internal static class WindowSnapshotProvider
     private const int MinimumWindowWidth = 50;
     private const int MinimumWindowHeight = 50;
 
+    internal static BrowserForeground CaptureBrowserForeground()
+    {
+        if (!SessionAvailability.IsInputDesktop()) return new("", "");
+        IntPtr hwnd = Win32.GetForegroundWindow();
+        if (hwnd == IntPtr.Zero || Win32.GetWindowThreadProcessId(hwnd, out uint pid) == 0) return new("", "");
+        string exe = GetExeName(pid);
+        return BrowserServices.IsBrowser(exe) ? new(exe, ToHexHwnd(hwnd)) : new("", "");
+    }
+
     public static Dictionary<string, AppSnapshot> CaptureCurrentStates(HashSet<string> excludedExeNames)
     {
         var byApp = new Dictionary<string, AppSnapshot>(StringComparer.OrdinalIgnoreCase);

@@ -49,6 +49,7 @@ public static class CollectorSettingsLoader
                 RescanIntervalSeconds = rescanInterval,
                 CheckpointIntervalSeconds = Math.Clamp(parsed.CheckpointIntervalSeconds, 1, 300),
                 StoreWindowTitles = parsed.StoreWindowTitles,
+                EnableBrowserTracking = parsed.EnableBrowserTracking,
                 SqliteFilePath = sqliteFilePath,
                 ExcludedExeNames = excludedExeNames
             };
