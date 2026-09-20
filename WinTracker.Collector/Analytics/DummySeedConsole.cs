@@ -8,6 +8,7 @@ internal static class DummySeedConsole
     {
         Hourly,
         Mixed,
+        Services,
         Minute
     }
 
@@ -120,6 +121,7 @@ internal static class DummySeedConsole
         return profile switch
         {
             SeedProfile.Hourly => BuildHourlyEvents(fromUtc, toUtc),
+            SeedProfile.Services => BuildServiceEvents(fromUtc, toUtc),
             SeedProfile.Mixed => BuildSegmentedEvents(
                 fromUtc,
                 toUtc,
@@ -132,6 +134,27 @@ internal static class DummySeedConsole
                 gapOptionsSeconds: [0, 20, 30, 60]),
             _ => BuildHourlyEvents(fromUtc, toUtc)
         };
+    }
+
+    internal static IReadOnlyList<AppEvent> BuildServiceEvents(DateTimeOffset fromUtc, DateTimeOffset toUtc)
+    {
+        string?[] services = ["gmail", "github", "youtube", "youtube", "twitch", "other-web", null, null];
+        var rows = new List<AppEvent>();
+        for (DateTimeOffset day = fromUtc; day < toUtc; day = day.AddDays(1))
+        {
+            DateTimeOffset end = day.AddHours(18) < toUtc ? day.AddHours(18) : toUtc;
+            if (end <= day.AddHours(8)) continue;
+            rows.Add(new(day.AddHours(8), end, "msedge.exe", 1, "0x1", "", "Open", SeedSource));
+            rows.Add(new(day.AddHours(8), end, "chrome.exe", 2, "0x2", "", "Open", SeedSource));
+            for (int i = 0; i < 16; i++)
+            {
+                DateTimeOffset start = day.AddHours(8).AddMinutes(i * 30);
+                if (start.AddMinutes(30) > toUtc) break;
+                string exe = i % 8 == 7 ? "Code.exe" : i % 2 == 0 ? "msedge.exe" : "chrome.exe";
+                rows.Add(new(start, start.AddMinutes(30), exe, 3, "0x3", "", "Active", SeedSource, services[i % 8]));
+            }
+        }
+        return rows;
     }
 
     private static IReadOnlyList<AppEvent> BuildHourlyEvents(DateTimeOffset fromUtc, DateTimeOffset toUtc)
@@ -317,11 +340,16 @@ internal static class DummySeedConsole
 
     private static void PrintUsage()
     {
-        Console.WriteLine("Usage: dotnet run --project .\\WinTracker.Collector\\WinTracker.Collector.csproj -- seed [24h|1week] [hourly|mixed|minute] --demo [--replace]");
+        Console.WriteLine("Usage: dotnet run --project .\\WinTracker.Collector\\WinTracker.Collector.csproj -- seed [24h|1week] [hourly|mixed|minute|services] --demo [--replace]");
     }
 
     private static bool TryParseProfile(string value, out SeedProfile profile)
     {
+        if (string.Equals(value, "services", StringComparison.OrdinalIgnoreCase))
+        {
+            profile = SeedProfile.Services;
+            return true;
+        }
         if (string.Equals(value, "hourly", StringComparison.OrdinalIgnoreCase))
         {
             profile = SeedProfile.Hourly;

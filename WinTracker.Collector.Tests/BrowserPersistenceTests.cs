@@ -14,6 +14,18 @@ public sealed class BrowserPersistenceTests
     private static readonly DateTimeOffset Start = DateTimeOffset.Parse("2026-09-20T00:00:00Z");
 
     [Fact]
+    public void BrowserDemoHasBoundedSyntheticServicesAndNoOverlappingForeground()
+    {
+        var rows = DummySeedConsole.NormalizeActiveIntervals(DummySeedConsole.BuildServiceEvents(Start, Start.AddDays(7)));
+        Assert.All(rows, row => { Assert.Equal("demo-seed", row.Source); Assert.Empty(row.Title); });
+        Assert.Equal(new[] { "gmail", "github", "youtube", "twitch", "other-web" },
+            rows.Where(row => row.ServiceId is not null).Select(row => row.ServiceId).Distinct());
+        var active = rows.Where(row => row.State == "Active").ToArray();
+        Assert.Equal(56 * 3600, active.Sum(row => (row.StateEndUtc - row.StateStartUtc).TotalSeconds));
+        for (int i = 1; i < active.Length; i++) Assert.True(active[i - 1].StateEndUtc <= active[i].StateStartUtc);
+    }
+
+    [Fact]
     public void ServiceChangesSplitAnOtherwiseUnchangedAppInterval()
     {
         var writer = new Recorder();
