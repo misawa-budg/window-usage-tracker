@@ -134,6 +134,51 @@ function Copy-DirectoryContents {
         -Action { Copy-Item -Path (Join-Path $SourceDir "*") -Destination $DestinationDir -Recurse -Force }
 }
 
+function Copy-PackageDocumentation {
+    param([Parameter(Mandatory = $true)][string]$DestinationDir)
+
+    foreach ($file in @("README.md", "LICENSE")) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination $DestinationDir
+    }
+    $docsDir = Join-Path $DestinationDir "docs"
+    New-Item -Path $docsDir -ItemType Directory -Force | Out-Null
+    foreach ($file in @("architecture.md", "verification.md", "interview-notes.md")) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot "docs/$file") -Destination $docsDir
+    }
+}
+
+function Copy-DependencyNotices {
+    param(
+        [Parameter(Mandatory = $true)][string]$ProjectPath,
+        [Parameter(Mandatory = $true)][string]$PackageDir,
+        [Parameter(Mandatory = $true)][string]$ApplicationName
+    )
+
+    $assetsPath = Join-Path (Split-Path $ProjectPath -Parent) "obj/project.assets.json"
+    $assets = Get-Content -LiteralPath $assetsPath -Raw | ConvertFrom-Json
+    $packagePaths = @($assets.libraries.PSObject.Properties | Where-Object {
+        $_.Value.type -eq "package"
+    } | ForEach-Object { $_.Value.path })
+    $runtimeConfig = Get-Content -LiteralPath (Join-Path $PackageDir "$ApplicationName.runtimeconfig.json") -Raw | ConvertFrom-Json
+    if ($runtimeConfig.runtimeOptions.PSObject.Properties.Name -contains "includedFrameworks") {
+        foreach ($framework in $runtimeConfig.runtimeOptions.includedFrameworks) {
+            $packagePaths += "$($framework.name.ToLowerInvariant()).runtime.$Runtime/$($framework.version)"
+        }
+    }
+    foreach ($packagePath in ($packagePaths | Sort-Object -Unique)) {
+        $source = $assets.packageFolders.PSObject.Properties.Name | ForEach-Object {
+            Join-Path $_ $packagePath
+        } | Where-Object { Test-Path -LiteralPath $_ -PathType Container } | Select-Object -First 1
+        if (-not $source) { throw "Dependency package not found: $packagePath" }
+        $destination = Join-Path $PackageDir "licenses/$packagePath"
+        New-Item -Path $destination -ItemType Directory -Force | Out-Null
+        # Preserve publisher-provided notices and license metadata, without shipping caches.
+        Get-ChildItem -LiteralPath $source -File | Where-Object {
+            $_.Name -match '^(licen[sc]e|copying|copyright|third.party.notices)' -or $_.Extension -eq '.nuspec'
+        } | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $destination }
+    }
+}
+
 function New-ZipPackage {
     param(
         [Parameter(Mandatory = $true)][string]$SourceDir,
@@ -142,6 +187,14 @@ function New-ZipPackage {
 
     if (Test-Path -LiteralPath $ZipPath) {
         throw "Refusing to overwrite existing archive: $ZipPath"
+    }
+
+    # Never publish usage databases or local event/diagnostic logs.
+    $privateFiles = @(Get-ChildItem -LiteralPath $SourceDir -Recurse -File -Force | Where-Object {
+        $_.Name -match '\.(db|sqlite|sqlite3)(-wal|-shm|-journal)?$|\.(jsonl|log)$'
+    })
+    if ($privateFiles.Count -gt 0) {
+        throw "Package contains database/log files. Refusing to create archive."
     }
 
     Invoke-WithRetry `
@@ -220,6 +273,8 @@ function New-PortableBundle {
     )
     Set-Content -Path (Join-Path $bundleDir "Run-Demo.cmd") -Value $demoLauncher -Encoding ASCII
 
+    Copy-PackageDocumentation -DestinationDir $bundleDir
+
     if (-not $NoZip) {
         $zipPath = Join-Path $ResolvedOutputRoot ("{0}.zip" -f $bundleName)
         New-ZipPackage -SourceDir $bundleDir -ZipPath $zipPath
@@ -285,6 +340,10 @@ foreach ($target in $targets) {
             Copy-Item -Path $target.SettingsFile -Destination (Join-Path $publishDir "collector.settings.json") -Force
             New-Item -Path (Join-Path $publishDir "data") -ItemType Directory -Force | Out-Null
         }
+
+        Copy-PackageDocumentation -DestinationDir $publishDir
+        $applicationName = if ($target.Name -eq "viewer") { "WinTracker.Viewer" } else { "WinTracker.Collector" }
+        Copy-DependencyNotices -ProjectPath $target.Project -PackageDir $publishDir -ApplicationName $applicationName
 
         if (-not $NoZip) {
             $zipPath = Join-Path $resolvedOutputRoot ("{0}.zip" -f $packageName)

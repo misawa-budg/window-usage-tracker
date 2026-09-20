@@ -13,6 +13,7 @@ Windows 11 向けの軽量なアプリケーション利用時間トラッカー
 ## 実行方法
 
 配布されたZipファイル（例：`window-usage-tracker-portable-*.zip`）を展開し、中にある以下の `.cmd` ファイルをダブルクリックするだけで利用できます。
+通常は実行環境同梱の **`window-usage-tracker-portable-win-x64-sc.zip`** を選んでください。ZIP内から直接実行せず、書き込み可能なフォルダに全体を展開します。Windows x64向けで、ARM64版は配布していません。
 いずれも同じ設定ファイル（`data/collector.db`等）を共有して動作します。
 
 1. **`Run-Collector.cmd`**: コンソール付きで収集を開始します。Ctrl+Cで停止します。
@@ -22,11 +23,21 @@ Windows 11 向けの軽量なアプリケーション利用時間トラッカー
 
 旧版の配布フォルダや実データを新規ビルドで自動更新することはありません。差し替え時は旧Collectorを停止し、DBと設定をバックアップしてから移行してください。旧版には `--stop` がありません。
 
+### 既存データを引き継ぐ更新
+
+1. 旧Viewerを閉じ、旧Collectorを正常停止します。対応版は `Stop-Collector.cmd`、コンソール起動の旧版はCtrl+Cを使い、終了を確認します。非表示の旧版が停止できない場合は強制終了や上書きをせず、停止方法を確認してください。
+2. 旧フォルダ全体を別の場所へバックアップします。DBだけを稼働中にコピーしないでください。
+3. 新ZIPを別フォルダへ展開し、旧版の `data` フォルダと `collector.settings.json` を引き継ぎます。DB保存先を変更している場合は、設定の `sqliteFilePath` の参照先も確認します。
+4. 新版のViewerで過去の記録を確認してからCollectorを起動します。同じWindowsセッションではCollectorは1つだけ動作します。
+5. 自動起動を別途登録している場合は、登録先パスとの一致を確認します。このZIPはタスクやサービスを自動登録しません。正常動作を確認するまでバックアップは残してください。
+
+v0.2.0以降の既定ではウィンドウタイトルを保存しません。引き継いだ設定で `storeWindowTitles: true` を指定していれば保存が続きます。既存タイトルと過去の状態集約結果は自動変更されません。
+
 ## 主な機能（Viewer）
 
 最新仕様のタイムライン表示に対応しています。
 
-- **期間切替**: `24h`（当日） / `1week`（直近7日）に切り替えて表示。
+- **期間切替**: 「今日」 / 「直近7日」に切り替えて表示。
 - **一覧タイムライン（Overview）**: `Active` の区間を連続時間として1レーン描画します（同時刻に `Active` は原則1つ）。
 - **アプリ別タイムライン**: アプリごとの区間を連続時間として描画し、`Active` / `Open` / `Minimized` を同一色相の濃淡で表示します。
 - **ツールチップ表示**: 時刻と継続時間は `HH:mm:ss` で表示します。
@@ -35,7 +46,7 @@ Windows 11 向けの軽量なアプリケーション利用時間トラッカー
 
 - Windows 11
 - 開発: .NET 10 SDK、WinUI 3をビルドできるVisual Studio / Windows SDK
-- framework-dependent版: Collectorに.NET 10、Viewerに.NET 8とWindows App SDK 1.7の実行環境
+- framework-dependent版: Collectorに.NET 10、Viewerに.NET 8とWindows App Runtime 2.5.1以降の互換ランタイム（x64）が必要
 - self-contained版: .NET / Windows App SDKを同梱（Windows 11は必要）
 
 ## 開発・ビルド時の実行
@@ -70,7 +81,8 @@ dotnet run --project .\WinTracker.Viewer\WinTracker.Viewer.csproj -- --demo
 - `Running` は観測対象ウィンドウの3状態を統合した表示であり、ウィンドウのない全プロセスの稼働時間ではありません。
 - 短時間の利用も表示します。アプリ別一覧は8件に制限しません。Overviewの凡例・描画は上位8件＋Otherです。合計はHH:mm、詳細ツールチップは秒単位です。
 - 通常画面・レポートでは過去の `demo-seed` 行も集計から除外します。DEMO画面は合成データで、当日分には未来時刻を含むサンプルもあります。
-- `Collector: Process detected` はプロセスの存在確認で、保存処理の健全性までは保証しません。Viewerのデータ更新は更新ボタンで行います。
+- `Collector 起動中` は起動の検出で、保存処理の健全性までは保証しません。Viewerのデータ更新は更新ボタンで行います。
+- 夏時間（DST）の切替をまたぐ日付境界、高DPI、別PCでの動作は検証が限定的です。厳密な勤怠・課金の根拠には使わないでください。
 
 ## 検証
 
@@ -95,6 +107,7 @@ powershell -ExecutionPolicy Bypass -File .\release.ps1
 ```
 
 毎回 `artifacts/release-日時` へ作成します。既存の非空出力先は拒否し、既存DBの削除や稼働中アプリの強制終了はしません。FD/SCのViewerビルド出力も分離しています。
+各パッケージにREADME・LICENSE・設計／検証資料を同梱します。DB・イベントログ・診断ログを検出した場合はZIP作成を中止します。リリースのSHA-256と照合するには `Get-FileHash <ZIPのパス> -Algorithm SHA256` を使います。
 
 ## License
 MIT License (`LICENSE`)
