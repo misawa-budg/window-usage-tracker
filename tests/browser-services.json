@@ -1,0 +1,194 @@
+[
+  {
+    "url": "https://www.youtube.com/watch?v=secret",
+    "defaultId": "youtube",
+    "hostId": "youtube",
+    "displayName": "YouTube"
+  },
+  {
+    "url": "https://music.youtube.com/",
+    "defaultId": "youtube",
+    "hostId": "youtube",
+    "displayName": "YouTube"
+  },
+  {
+    "url": "https://www.twitch.tv/private-channel",
+    "defaultId": "twitch",
+    "hostId": "twitch",
+    "displayName": "Twitch"
+  },
+  {
+    "url": "https://mail.google.com/mail/u/1/#inbox/private",
+    "defaultId": "gmail",
+    "hostId": "gmail",
+    "displayName": "Gmail"
+  },
+  {
+    "url": "https://github.com/private/repo",
+    "defaultId": "github",
+    "hostId": "github",
+    "displayName": "GitHub"
+  },
+  {
+    "url": "https://www.netflix.com/watch/private",
+    "defaultId": "netflix",
+    "hostId": "netflix",
+    "displayName": "Netflix"
+  },
+  {
+    "url": "https://video.unext.jp/play/private",
+    "defaultId": "unext",
+    "hostId": "unext",
+    "displayName": "U-NEXT"
+  },
+  {
+    "url": "https://chatgpt.com/c/private",
+    "defaultId": "chatgpt",
+    "hostId": "chatgpt",
+    "displayName": "ChatGPT（Web）"
+  },
+  {
+    "url": "https://chat.openai.com/",
+    "defaultId": "chatgpt",
+    "hostId": "chatgpt",
+    "displayName": "ChatGPT（Web）"
+  },
+  {
+    "url": "https://claude.ai/chat/private",
+    "defaultId": "claude",
+    "hostId": "claude",
+    "displayName": "Claude（Web）"
+  },
+  {
+    "url": "https://gemini.google.com/app/private",
+    "defaultId": "gemini",
+    "hostId": "gemini",
+    "displayName": "Gemini"
+  },
+  {
+    "url": "https://drive.google.com/",
+    "defaultId": "other-web",
+    "hostId": "host:drive.google.com",
+    "displayName": "drive.google.com"
+  },
+  {
+    "url": "https://youtube.com.evil.example/",
+    "defaultId": "other-web",
+    "hostId": "host:youtube.com.evil.example",
+    "displayName": "youtube.com.evil.example"
+  },
+  {
+    "url": "https://notyoutube.com/",
+    "defaultId": "other-web",
+    "hostId": "host:notyoutube.com",
+    "displayName": "notyoutube.com"
+  },
+  {
+    "url": "https://example.com/?next=https://youtube.com",
+    "defaultId": "other-web",
+    "hostId": "host:example.com",
+    "displayName": "example.com"
+  },
+  {
+    "url": "https://youtube.com@evil.example/",
+    "defaultId": "other-web",
+    "hostId": "host:evil.example",
+    "displayName": "evil.example"
+  },
+  {
+    "url": "https://keio.jp/private?q=secret",
+    "defaultId": "other-web",
+    "hostId": "host:keio.jp",
+    "displayName": "keio.jp"
+  },
+  {
+    "url": "https://portal.keio.jp/",
+    "defaultId": "other-web",
+    "hostId": "host:portal.keio.jp",
+    "displayName": "portal.keio.jp"
+  },
+  {
+    "url": "https://user:password@PORTAL.EXAMPLE.:8443/path?secret=1#fragment",
+    "defaultId": "other-web",
+    "hostId": "host:portal.example",
+    "displayName": "portal.example"
+  },
+  {
+    "url": "https://例え.example/",
+    "defaultId": "other-web",
+    "hostId": "host:xn--r8jz45g.example",
+    "displayName": "xn--r8jz45g.example"
+  },
+  {
+    "url": "https://chatgpt.com.evil.example/",
+    "defaultId": "other-web",
+    "hostId": "host:chatgpt.com.evil.example",
+    "displayName": "chatgpt.com.evil.example"
+  },
+  {
+    "url": "http://127.0.0.1/",
+    "defaultId": "other-web",
+    "hostId": "other-web",
+    "displayName": "その他のWeb"
+  },
+  {
+    "url": "http://2130706433/",
+    "defaultId": "other-web",
+    "hostId": "other-web",
+    "displayName": "その他のWeb"
+  },
+  {
+    "url": "http://[::1]/",
+    "defaultId": "other-web",
+    "hostId": "other-web",
+    "displayName": "その他のWeb"
+  },
+  {
+    "url": "http://localhost/",
+    "defaultId": "other-web",
+    "hostId": "other-web",
+    "displayName": "その他のWeb"
+  },
+  {
+    "url": "https://bad_host.example/",
+    "defaultId": "other-web",
+    "hostId": "other-web",
+    "displayName": "その他のWeb"
+  },
+  {
+    "url": "https://-bad.example/",
+    "defaultId": "other-web",
+    "hostId": "other-web",
+    "displayName": "その他のWeb"
+  },
+  {
+    "url": "file:///C:/private.txt",
+    "defaultId": null,
+    "hostId": null,
+    "displayName": "Edge（未取得）"
+  },
+  {
+    "url": "chrome://settings",
+    "defaultId": null,
+    "hostId": null,
+    "displayName": "Edge（未取得）"
+  },
+  {
+    "url": "edge://newtab",
+    "defaultId": null,
+    "hostId": null,
+    "displayName": "Edge（未取得）"
+  },
+  {
+    "url": null,
+    "defaultId": null,
+    "hostId": null,
+    "displayName": "Edge（未取得）"
+  },
+  {
+    "url": "invalid",
+    "defaultId": null,
+    "hostId": null,
+    "displayName": "Edge（未取得）"
+  }
+]

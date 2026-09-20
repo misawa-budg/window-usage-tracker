@@ -23,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\WinTracker.Shared\WinTracker.Shared.csproj" />
     <None Include="..\WinTracker.Viewer\MainWindow.xaml" Link="Ui\MainWindow.xaml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\tests\browser-services.json" Link="Contracts\browser-services.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
