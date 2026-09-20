@@ -38,7 +38,7 @@ public sealed class IntervalLayoutContractTests
         var row = Assert.Single(_builder.BuildDailyAppRowsFromIntervals(
             [new("app.exe", state, Start.AddMinutes(10), Start.AddMinutes(10.5))], window, 120));
         var segment = Assert.Single(row.Segments, x => !x.IsNoData);
-        Assert.Equal(TimelineLayoutBuilder.ColorForAppState("app.exe", state), segment.ColorHex);
+        Assert.Equal(TimelinePresentation.ColorForAppState("app.exe", state), segment.ColorHex);
         Assert.Equal(1.0, segment.Width, 6);
         Assert.Equal(120.0, row.Segments.Sum(x => x.Width), 6);
     }
