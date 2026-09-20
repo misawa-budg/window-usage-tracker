@@ -150,6 +150,19 @@ Desktopの実DB（約41.2 MiB）をReadOnlyで参照。2026-09-10〜09-16の7日
 
 ## その他の仕様の根拠
 
+## v0.2.0公開前検証（2026-09-20）
+
+- Windows App SDKを1.7.250606001から安定版2.5.1へ更新。依存先の要求に合わせWindows SDK BuildToolsを10.0.26100.4654へ更新した。WinUI 3、Collectorの.NET 10、Viewer/Sharedの.NET 8と既存の責務分離は維持。アプリバージョンはDirectory.Build.propsで0.2.0に統一。
+- 更新理由は[公式サポート情報](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/release-channels)に基づく。1.7系は2026-03-18にサポート終了。2.5.1は2.0系列の安定版で、[リリースノート](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/release-notes/windows-app-sdk-2-0)とNuGet配信を確認した。
+- Release/self-contained Viewerビルドは警告0・エラー0、Collector 32件＋Viewer 38件＝70件成功。`dotnet list WinTracker.slnx package --vulnerable --include-transitive` は全5プロジェクトで既知脆弱性の指摘なし。未知の欠陥やOS・全ランタイムの安全性を保証する検査ではない。
+- `release.ps1` でCollector/Viewer単体およびPortableのFD/SC全6ZIPを生成。README、移行手順、プロジェクトLICENSE、設計・検証資料と、依存パッケージ提供のライセンス・通知・NuGetメタデータを同梱する。SCでは同梱.NETランタイムのライセンス・third-party noticesも含む。
+- 作成前のDB/log混入拒否を合成の拡張子テストで確認し、非空OutputRoot拒否も確認した。作成後は `scripts/Test-ReleasePackages.ps1` で6ZIPすべての必須ファイル、DB/log/env不在、依存通知、ViewerのFD/SCランタイム構成、SCのWinUI DLLを確認。アーカイブ作成中の読み取りはファイルロックで拒否されたため、完了後に再実行して成功した。
+- Portable SCのZIPを独立した `artifacts/release-smoke-20260920` に展開し、Collectorのseedコマンドで専用demo.dbへ合成2,793行を生成。展開先のViewerをDEMOモードで起動した。配布元フォルダへseedせず、配布ZIPにDBは含めない。
+- Windows操作スキルで1426×746の実画面を確認。今回は自動入力が成功し、今日→直近7日→状態別表示、スクロール後の選択アプリ7行、固定日付・期間欄と更新ボタンの動作を確認した。起動中のDesktop Collectorと実DBには変更を行っていない。
+- 別PC／クリーンOS、FD Viewerのランタイム導入、ARM64、高DPI・最小サイズ、DST境界、長期運用と更新後の性能再計測は未検証。DLL同梱・実機起動の確認を、全環境での保証とは扱わない。Viewerには無操作検出がなく、厳密な勤怠や課金用ではない。
+
+### 参考リンク
+
 - [Windows console HandlerRoutine](https://learn.microsoft.com/en-us/windows/console/handlerroutine)
 - [SetConsoleCtrlHandlerのログオフ/シャットダウン制約](https://learn.microsoft.com/en-us/windows/console/setconsolectrlhandler)
 - [GetUserObjectInformation / UOI_IO](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getuserobjectinformationw)

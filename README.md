@@ -108,6 +108,7 @@ powershell -ExecutionPolicy Bypass -File .\release.ps1
 
 毎回 `artifacts/release-日時` へ作成します。既存の非空出力先は拒否し、既存DBの削除や稼働中アプリの強制終了はしません。FD/SCのViewerビルド出力も分離しています。
 各パッケージにREADME・LICENSE・設計／検証資料を同梱します。DB・イベントログ・診断ログを検出した場合はZIP作成を中止します。リリースのSHA-256と照合するには `Get-FileHash <ZIPのパス> -Algorithm SHA256` を使います。
+依存パッケージが提供するライセンス・通知・NuGetメタデータは各アプリの `licenses` に保存します。作成後は `./scripts/Test-ReleasePackages.ps1 -OutputRoot <出力フォルダ>` で全6種類の必須ファイル・実データ混入・FD/SC構成を確認できます。
 
 ## License
 MIT License (`LICENSE`)
