@@ -7,6 +7,7 @@ internal sealed class SqliteTimelineQueryService : IDisposable
 {
     private readonly SqliteConnection _connection;
     private readonly bool _includeDemo;
+    private readonly bool _hasServices;
 
     public SqliteTimelineQueryService(string databasePath, bool includeDemo = false)
     {
@@ -16,18 +17,22 @@ internal sealed class SqliteTimelineQueryService : IDisposable
             DataSource = databasePath, Mode = SqliteOpenMode.ReadOnly, Cache = SqliteCacheMode.Shared
         }.ToString());
         _connection.Open();
+        using var schema = _connection.CreateCommand();
+        schema.CommandText = "SELECT COUNT(*) FROM pragma_table_info('app_events') WHERE name = 'service_id';";
+        _hasServices = Convert.ToInt32(schema.ExecuteScalar()) != 0;
     }
 
     public IReadOnlyList<AppStateIntervalRow> QueryStateIntervals(UsageQueryWindow window)
     {
         using var command = _connection.CreateCommand();
         command.CommandText =
-            """
+            $"""
             SELECT
                 exe_name,
                 state,
                 state_start_utc,
-                state_end_utc
+                state_end_utc,
+                {(_hasServices ? "service_id" : "NULL")} AS service_id
             FROM app_events
             WHERE state_end_utc > $from_utc
               AND state_start_utc < $to_utc
@@ -52,7 +57,8 @@ internal sealed class SqliteTimelineQueryService : IDisposable
                 ExeName: reader.GetString(0),
                 State: reader.GetString(1),
                 StateStartUtc: clippedStart,
-                StateEndUtc: clippedEnd));
+                StateEndUtc: clippedEnd,
+                ServiceId: reader.IsDBNull(4) ? null : reader.GetString(4)));
         }
 
         return rows;

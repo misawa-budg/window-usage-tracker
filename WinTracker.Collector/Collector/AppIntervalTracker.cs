@@ -12,7 +12,7 @@ internal sealed class AppIntervalTracker(IAppEventWriter writer)
         {
             if (_intervals.TryGetValue(key, out TrackedInterval existing))
             {
-                if (existing.Snapshot.State == snapshot.State)
+                if (existing.Snapshot.State == snapshot.State && existing.Snapshot.ServiceId == snapshot.ServiceId)
                 {
                     _intervals[key] = existing with
                     {
@@ -48,6 +48,6 @@ internal sealed class AppIntervalTracker(IAppEventWriter writer)
         if (end <= interval.StartUtc) return;
         AppSnapshot snapshot = interval.Snapshot;
         writer.Write(new AppEvent(interval.StartUtc, end, snapshot.ExeName, snapshot.Pid,
-            snapshot.Hwnd, snapshot.Title, snapshot.State, source));
+            snapshot.Hwnd, snapshot.Title, snapshot.State, source, snapshot.ServiceId));
     }
 }

@@ -6,7 +6,7 @@ public sealed record AppChoice(string ExeName)
     public string DisplayName => FormatDisplayName(ExeName);
 
     public static string FormatDisplayName(string exeName) =>
-        exeName.Length > 4 && exeName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+        BrowserServices.DisplayName(exeName) ?? (exeName.Length > 4 && exeName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
             ? exeName[..^4]
-            : exeName;
+            : exeName);
 }

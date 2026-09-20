@@ -6,4 +6,5 @@ internal readonly record struct AppEvent(
     string Hwnd,
     string Title,
     string State,
-    string Source);
+    string Source,
+    string? ServiceId = null);

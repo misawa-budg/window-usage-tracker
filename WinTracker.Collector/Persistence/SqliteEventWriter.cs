@@ -39,7 +39,8 @@ internal sealed class SqliteEventWriter : IAppEventWriter
                 hwnd,
                 title,
                 state,
-                source
+                source,
+                service_id
             ) VALUES (
                 $event_at_utc,
                 $state_start_utc,
@@ -49,7 +50,8 @@ internal sealed class SqliteEventWriter : IAppEventWriter
                 $hwnd,
                 $title,
                 $state,
-                $source
+                $source,
+                $service_id
             );
             """;
         _insertCommand.Parameters.Add("$event_at_utc", SqliteType.Text);
@@ -61,6 +63,7 @@ internal sealed class SqliteEventWriter : IAppEventWriter
         _insertCommand.Parameters.Add("$title", SqliteType.Text);
         _insertCommand.Parameters.Add("$state", SqliteType.Text);
         _insertCommand.Parameters.Add("$source", SqliteType.Text);
+        _insertCommand.Parameters.Add("$service_id", SqliteType.Text);
     }
 
     public void Write(AppEvent appEvent)
@@ -136,6 +139,12 @@ internal sealed class SqliteEventWriter : IAppEventWriter
             ON app_events(state_end_utc, state_start_utc);
             """;
         command.ExecuteNonQuery();
+        command.CommandText = "SELECT COUNT(*) FROM pragma_table_info('app_events') WHERE name = 'service_id';";
+        if (Convert.ToInt32(command.ExecuteScalar()) == 0)
+        {
+            command.CommandText = "ALTER TABLE app_events ADD COLUMN service_id TEXT NULL;";
+            command.ExecuteNonQuery();
+        }
     }
 
     private void FlushBuffer()
@@ -170,5 +179,10 @@ internal sealed class SqliteEventWriter : IAppEventWriter
         _insertCommand.Parameters["$title"].Value = appEvent.Title;
         _insertCommand.Parameters["$state"].Value = appEvent.State;
         _insertCommand.Parameters["$source"].Value = appEvent.Source;
+        // Only the fixed, privacy-preserving vocabulary is persisted, never arbitrary browser strings.
+        _insertCommand.Parameters["$service_id"].Value = appEvent.State == "Active" &&
+            WinTracker.Shared.Analytics.BrowserServices.IsBrowser(appEvent.ExeName) &&
+            WinTracker.Shared.Analytics.BrowserServices.IsKnown(appEvent.ServiceId)
+                ? appEvent.ServiceId! : DBNull.Value;
     }
 }

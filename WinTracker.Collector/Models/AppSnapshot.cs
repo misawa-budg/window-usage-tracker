@@ -3,4 +3,5 @@ internal readonly record struct AppSnapshot(
     uint Pid,
     string Hwnd,
     string Title,
-    string State);
+    string State,
+    string? ServiceId = null);

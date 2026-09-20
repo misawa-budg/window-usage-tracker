@@ -27,4 +27,5 @@ public readonly record struct AppStateIntervalRow(
     string ExeName,
     string State,
     DateTimeOffset StateStartUtc,
-    DateTimeOffset StateEndUtc);
+    DateTimeOffset StateEndUtc,
+    string? ServiceId = null);
