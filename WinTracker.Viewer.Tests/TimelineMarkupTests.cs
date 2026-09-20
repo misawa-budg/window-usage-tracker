@@ -38,12 +38,19 @@ public sealed class TimelineMarkupTests
 
     [Theory]
     [InlineData("RangeComboBox", "24h", "1week")]
-    [InlineData("AppDisplayModeComboBox", "Running", "StateDetails")]
     public void SelectionKeepsStableTagsIndependentOfDisplayText(string name, string first, string second)
     {
         XElement control = Load().Descendants().Single(x => (string?)x.Attribute(Xaml + "Name") == name);
         Assert.Equal(new[] { first, second }, control.Elements().Select(x => (string?)x.Attribute("Tag")));
         Assert.All(control.Elements(), x => Assert.NotEqual((string?)x.Attribute("Tag"), (string?)x.Attribute("Content")));
+    }
+
+    [Fact]
+    public void ServiceModeIsTheDefaultAndOriginalStateModesRemainAvailable()
+    {
+        var control = Load().Descendants().Single(x => (string?)x.Attribute(Xaml + "Name") == "AppDisplayModeComboBox");
+        Assert.Equal("0", (string?)control.Attribute("SelectedIndex"));
+        Assert.Equal(new[] { "Services", "Running", "StateDetails" }, control.Elements().Select(x => (string?)x.Attribute("Tag")));
     }
 
     [Fact]

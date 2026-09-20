@@ -16,6 +16,7 @@ public sealed partial class MainWindow : Window
 {
     private enum AppDisplayMode
     {
+        Services,
         Running,
         StateDetails
     }
@@ -39,7 +40,7 @@ public sealed partial class MainWindow : Window
 
     private IReadOnlyList<ActiveIntervalRow> _activeIntervals = [];
     private IReadOnlyList<AppStateIntervalRow> _stateIntervals = [];
-    private AppDisplayMode _appDisplayMode = AppDisplayMode.Running;
+    private AppDisplayMode _appDisplayMode = AppDisplayMode.Services;
     private UsageQueryWindow _currentWindow = CreateLocalDay24hWindow();
     private CancellationTokenSource? _reloadCts;
     private bool _isInitialized;
@@ -140,6 +141,11 @@ public sealed partial class MainWindow : Window
         }
 
         _appDisplayMode = GetAppDisplayMode();
+        RebuildActiveIntervals();
+        if (GetRangeLabel() == "24h") BuildDailyOverviewRows();
+        else BuildWeeklyOverviewRows();
+        RebuildOverviewLegend();
+        UpdateAppLabels();
         RebuildAppRowsByCurrentMode();
         RebuildAppLegend();
     }
@@ -182,9 +188,8 @@ public sealed partial class MainWindow : Window
             token.ThrowIfCancellationRequested();
             if (_isClosed) return;
             _stateIntervals = stateIntervals;
-            _activeIntervals = stateIntervals.Where(x => x.State == "Active")
-                .Select(x => new ActiveIntervalRow(x.ExeName, x.StateStartUtc, x.StateEndUtc)).ToArray();
             _appDisplayMode = GetAppDisplayMode();
+            RebuildActiveIntervals();
 
             if (GetRangeLabel() == "24h")
             {
@@ -277,7 +282,7 @@ public sealed partial class MainWindow : Window
         AppLabelTextBlock.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
         AppComboBox.Visibility = isDaily24h ? Visibility.Collapsed : Visibility.Visible;
         AppDailyPanel.Visibility = Visibility.Visible;
-        AppHeaderLabelTextBlock.Text = isDaily24h ? "アプリ" : "日付";
+        UpdateAppLabels();
 
         _appDailyLanes.Clear();
     }
@@ -293,9 +298,27 @@ public sealed partial class MainWindow : Window
     private AppDisplayMode GetAppDisplayMode()
     {
         string? mode = (AppDisplayModeComboBox.SelectedItem as ComboBoxItem)?.Tag?.ToString();
-        return string.Equals(mode, "StateDetails", StringComparison.Ordinal)
-            ? AppDisplayMode.StateDetails
-            : AppDisplayMode.Running;
+        return mode switch
+        {
+            "Services" => AppDisplayMode.Services,
+            "StateDetails" => AppDisplayMode.StateDetails,
+            _ => AppDisplayMode.Running
+        };
+    }
+
+    private void UpdateAppLabels()
+    {
+        string label = _appDisplayMode == AppDisplayMode.Services ? "アプリ・サービス" : "アプリ";
+        AppHeaderLabelTextBlock.Text = GetRangeLabel() == "24h" ? label : "日付";
+        AppLabelTextBlock.Text = label;
+    }
+
+    private void RebuildActiveIntervals()
+    {
+        var rows = _appDisplayMode == AppDisplayMode.Services
+            ? BrowserServices.ProjectForeground(_stateIntervals) : _stateIntervals;
+        _activeIntervals = rows.Where(x => x.State == "Active")
+            .Select(x => new ActiveIntervalRow(x.ExeName, x.StateStartUtc, x.StateEndUtc)).ToArray();
     }
 
     private static UsageQueryWindow CreateLocalDay24hWindow()
@@ -388,7 +411,7 @@ public sealed partial class MainWindow : Window
         try
         {
             string? current = (AppComboBox.SelectedItem as AppChoice)?.ExeName;
-            IReadOnlyList<string> appNames = _layoutBuilder.BuildAppNames(_stateIntervals);
+            IReadOnlyList<string> appNames = _layoutBuilder.BuildAppNames(GetAppDisplayIntervals());
 
             _appNames.Clear();
             foreach (string app in appNames)
@@ -431,6 +454,11 @@ public sealed partial class MainWindow : Window
     private void RebuildAppLegend()
     {
         _appLegendItems.Clear();
+        if (_appDisplayMode == AppDisplayMode.Services)
+        {
+            _appLegendItems.Add(new LegendItemViewModel(CreateBrush("BrushTextSecondary"), "最前面の時間"));
+            return;
+        }
         IReadOnlyList<LegendItemLayout> legendItems =
             _appDisplayMode == AppDisplayMode.Running
                 ? _layoutBuilder.BuildAppRunningLegend()
@@ -550,6 +578,8 @@ public sealed partial class MainWindow : Window
 
     private IReadOnlyList<AppStateIntervalRow> GetAppDisplayIntervals()
     {
+        if (_appDisplayMode == AppDisplayMode.Services)
+            return BrowserServices.ProjectForeground(_stateIntervals);
         if (_appDisplayMode == AppDisplayMode.StateDetails)
         {
             return _stateIntervals;

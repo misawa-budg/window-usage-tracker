@@ -136,7 +136,7 @@ public sealed class TimelineLayoutBuilder
                     sliceWidth,
                     ColorForAppState(appName, state),
                     $"{appName}|{state}",
-                    $"{appName} | {state}",
+                    $"{BrowserServices.DisplayName(appName) ?? appName} | {state}",
                     sliceStartUtc.ToLocalTime(),
                     sliceEndUtc.ToLocalTime(),
                     sliceSeconds);
@@ -223,7 +223,7 @@ public sealed class TimelineLayoutBuilder
                     sliceWidth,
                     ColorForAppState(appName, state),
                     $"{appName}|{state}",
-                    $"{appName} | {state}",
+                    $"{BrowserServices.DisplayName(appName) ?? appName} | {state}",
                     sliceStartUtc.ToLocalTime(),
                     sliceEndUtc.ToLocalTime(),
                     sliceSeconds);
@@ -607,7 +607,7 @@ public sealed class TimelineLayoutBuilder
                 foreach (string app in column.AppOrder)
                 {
                     double seconds = column.SecondsByApp.GetValueOrDefault(app, 0);
-                    string tooltip = $"{_state} | {app} | {FormatTooltipTimeRange(column.LocalStart, column.LocalEnd)} | {ToDurationWithSeconds(seconds)}";
+                    string tooltip = $"{_state} | {BrowserServices.DisplayName(app) ?? app} | {FormatTooltipTimeRange(column.LocalStart, column.LocalEnd)} | {ToDurationWithSeconds(seconds)}";
                     entries.Add(new StackedEntryLayout(
                         app,
                         column.ColorByApp.GetValueOrDefault(app, OtherColorKey),

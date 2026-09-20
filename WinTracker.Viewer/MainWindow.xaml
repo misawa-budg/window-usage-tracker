@@ -243,7 +243,7 @@
                     <StackPanel
                         Spacing="8">
                         <TextBlock
-                            Text="最前面アプリの推移"
+                            Text="最前面の推移"
                             Style="{StaticResource SectionHeading}" />
                         <ItemsControl
                             x:Name="OverviewLegendItemsControl"
@@ -347,7 +347,7 @@
                     <StackPanel
                         Spacing="8">
                         <TextBlock
-                            Text="アプリ別のウィンドウ記録"
+                            Text="アプリ・サービスの記録"
                             Style="{StaticResource SectionHeading}" />
                         <StackPanel
                             x:Name="AppSelectorCard"
@@ -360,10 +360,13 @@
                                 Foreground="{ThemeResource BrushTextPrimary}" />
                             <ComboBox
                                 x:Name="AppDisplayModeComboBox"
-                                Width="180"
+                                Width="220"
                                 SelectedIndex="0"
-                                AutomationProperties.Name="ウィンドウ状態の表示方法"
+                                AutomationProperties.Name="アプリ・サービスの表示方法"
                                 SelectionChanged="OnAppDisplayModeSelectionChanged">
+                                <ComboBoxItem
+                                    Content="サービス別（最前面）"
+                                    Tag="Services" />
                                 <ComboBoxItem
                                     Content="状態をまとめる"
                                     Tag="Running" />
@@ -381,7 +384,7 @@
                                 x:Name="AppComboBox"
                                 Width="240"
                                 DisplayMemberPath="DisplayName"
-                                AutomationProperties.Name="週表示のアプリ"
+                                AutomationProperties.Name="週表示のアプリ・サービス"
                                 SelectionChanged="OnAppSelectionChanged" />
                         </StackPanel>
                         <ItemsControl
