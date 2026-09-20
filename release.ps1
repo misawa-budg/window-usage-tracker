@@ -235,7 +235,7 @@ function New-PortableBundle {
     Copy-DependencyNotices -ProjectPath $hostProject -PackageDir $hostDir -ApplicationName "WinTracker.BrowserHost"
     $extensionDir = Join-Path $bundleDir "browser-extension"
     New-Item -Path $extensionDir -ItemType Directory | Out-Null
-    foreach ($file in @("manifest.json", "background.js", "services.js")) {
+    foreach ($file in @("manifest.json", "background.js", "services.js", "diagnostics.js", "popup.html", "popup.js")) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot "browser-extension/$file") -Destination $extensionDir
     }
     $scriptsDir = Join-Path $bundleDir "scripts"

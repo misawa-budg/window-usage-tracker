@@ -38,6 +38,21 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Register-Brows
 
 ソースからビルドする場合は `dotnet build WinTracker.BrowserHost -c Release`。ホストのexeは同プロジェクトの `bin/Release/net10.0/` にあります。FDホストの実行には.NET 10が必要で、SC配布物では同梱されます。
 
+### 接続できないとき
+
+拡張を再読み込みしてから、ツールバーのWinTracker拡張ボタンを押すと「接続診断」が開きます。「再接続」を押し、数秒後に「状態を更新」で確認してください。サービスワーカーのConsole操作は不要です。
+
+- `HOST_NOT_FOUND`: ネイティブホストの登録またはマニフェストが見つかりません。
+- `HOST_FORBIDDEN`: 拡張IDの許可設定や管理ポリシーによる拒否です。ポリシーは回避しないでください。
+- `HOST_START_FAILED`: 中継exeを起動できません。
+- `HOST_EXITED`: 中継が終了しました。Collectorの起動と `enableBrowserTracking` を確認してください。
+- `HOST_IO_ERROR`: 中継との通信エラーです。
+- `WORKER_UNAVAILABLE`: 拡張の処理から応答がありません。再読み込みと拡張管理画面のエラーを確認してください。
+
+`WAITING_FOR_COLLECTOR` は接続要求を送った後の応答待ち、`CONNECTED` はCollectorから応答を受け取った状態です。接続成功だけではサービス記録の保存成功を意味しません。`lastError` は直近の失敗として接続成功後も残ります。試行回数と応答回数は拡張の処理が再起動するとリセットされます。
+
+診断結果は選択してコピーできます。表示するのは拡張ID・版・固定のエラー種別・接続状態・回数・接続関連の時刻のみです。生のエラー文、URL、タイトル、サービス履歴は出力せず、診断情報をファイルやストレージに永続化しません。追加の権限も要求しません。
+
 ## 無効化・元に戻す
 
 - 拡張を無効化／削除し、Collector設定をfalseにして再起動すると従来の記録へ戻ります。

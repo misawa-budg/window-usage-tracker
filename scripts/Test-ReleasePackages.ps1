@@ -17,6 +17,7 @@ foreach ($mode in @("fd", "sc")) {
                 $required += @("collector/WinTracker.Collector.exe", "viewer/WinTracker.Viewer.exe",
                     "browser-host/WinTracker.BrowserHost.exe", "browser-extension/manifest.json",
                     "browser-extension/background.js", "browser-extension/services.js",
+                    "browser-extension/diagnostics.js", "browser-extension/popup.html", "browser-extension/popup.js",
                     "scripts/Register-BrowserHost.ps1", "docs/browser-services.md",
                     "collector.settings.json", "Run-Collector.cmd", "Run-Viewer.cmd", "Run-Demo.cmd", "Stop-Collector.cmd")
                 $viewerPrefix = "viewer/"
