@@ -142,7 +142,7 @@ function Copy-PackageDocumentation {
     }
     $docsDir = Join-Path $DestinationDir "docs"
     New-Item -Path $docsDir -ItemType Directory -Force | Out-Null
-    foreach ($file in @("architecture.md", "verification.md", "interview-notes.md", "browser-services.md")) {
+    foreach ($file in @("architecture.md", "verification.md", "interview-notes.md", "browser-services.md", "usage.md")) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot "docs/$file") -Destination $docsDir
     }
 }

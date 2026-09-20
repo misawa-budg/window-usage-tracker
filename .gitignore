@@ -12,6 +12,7 @@ docs/*
 !docs/verification.md
 !docs/interview-notes.md
 !docs/browser-services.md
+!docs/usage.md
 
 # Visual Studio
 .vs/
