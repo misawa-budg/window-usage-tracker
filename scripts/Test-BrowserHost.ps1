@@ -61,9 +61,10 @@ try {
     $hello = Read-Frame $pipe
     if ($hello.kind -ne 'hello' -or $hello.browser -ne 'edge') { throw 'Bad browser-to-Collector relay.' }
     $nonce = [Guid]::NewGuid().ToString('N')
-    Write-Frame $pipe @{ kind = 'probe'; requestId = $nonce }
+    Write-Frame $pipe @{ kind = 'probe'; requestId = $nonce; storeBrowserHostnames = $true }
     $probe = Read-Frame $process.StandardOutput.BaseStream
     if ($probe.kind -ne 'probe' -or $probe.requestId -ne $nonce) { throw 'Bad Collector-to-browser relay.' }
+    if ($probe.storeBrowserHostnames -ne $true) { throw 'Host consent was not relayed.' }
     Write-Frame $process.StandardInput.BaseStream @{ kind = 'sample'; requestId = $nonce; focused = $true; serviceId = 'youtube' }
     $sample = Read-Frame $pipe
     if ($sample.serviceId -ne 'youtube' -or $sample.requestId -ne $nonce) { throw 'Bad sample relay.' }

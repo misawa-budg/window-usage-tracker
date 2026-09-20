@@ -36,6 +36,36 @@ foreach ($mode in @("fd", "sc")) {
             if (-not ($names | Where-Object { $_ -match '(^|/)licenses/.+\.nuspec$' })) {
                 throw "${name}: dependency notices missing"
             }
+            if ($names | Where-Object { $_ -match '(^|/)native-host[^/]*\.json$' }) {
+                throw "${name}: personal browser registration found"
+            }
+            foreach ($settingsEntry in @($zip.Entries | Where-Object {
+                $_.FullName.Replace('\', '/') -match '(^|/)collector\.settings\.json$'
+            })) {
+                $reader = [IO.StreamReader]::new($settingsEntry.Open())
+                try { $settings = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
+                foreach ($flag in @('enableBrowserTracking', 'storeBrowserHostnames', 'storeWindowTitles')) {
+                    if ($settings.PSObject.Properties.Name -notcontains $flag -or $settings.$flag -cne $false) {
+                        throw "${name}: $flag must explicitly default to false"
+                    }
+                }
+            }
+            if ($kind -eq 'window-usage-tracker-portable') {
+                $versions = foreach ($metadata in @('browser-extension/manifest.json',
+                    'collector/WinTracker.Collector.deps.json', 'viewer/WinTracker.Viewer.deps.json',
+                    'browser-host/WinTracker.BrowserHost.deps.json')) {
+                    $entry = $zip.Entries | Where-Object { $_.FullName.Replace('\', '/') -eq $metadata }
+                    if (-not $entry) { throw "${name}: missing $metadata" }
+                    $reader = [IO.StreamReader]::new($entry.Open())
+                    try { $data = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
+                    if ($metadata -like '*.deps.json') {
+                        $library = @($data.libraries.PSObject.Properties.Name | Where-Object { $_ -match '^WinTracker\.(Collector|Viewer|BrowserHost)/' })
+                        if ($library.Count -ne 1) { throw "${name}: ambiguous application version" }
+                        $library[0].Split('/')[1]
+                    } else { $data.version }
+                }
+                if (@($versions | Select-Object -Unique).Count -ne 1) { throw "${name}: application and extension versions differ" }
+            }
             if ($kind -ne "collector") {
                 $entry = $zip.Entries | Where-Object { $_.FullName.Replace('\', '/') -eq "${viewerPrefix}WinTracker.Viewer.runtimeconfig.json" }
                 $reader = [IO.StreamReader]::new($entry.Open())
