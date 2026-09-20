@@ -1,17 +1,35 @@
-# ブラウザサービス記録（v0.3.0）
+# ブラウザサービス記録（v0.3.1）
 
-Edge / Chromeの前面ウィンドウで選択されたタブを、YouTube・Twitch・Gmail・GitHub・その他のWebに分類する任意機能です。拡張のインストールと `enableBrowserTracking: true` の両方が必要です。既定では無効。公開済みv0.2.0にはこの機能はありません。
+Edge / Chromeの前面ウィンドウで選択されたタブを、サービス単位で表示する任意機能です。拡張のインストールと `enableBrowserTracking: true` の両方が必要です。未対応サイトは追加の `storeBrowserHostnames: true` でホスト名ごとに表示できます。配布時は両方ともfalse。公開済みv0.2.0にはこの機能はなく、0.3.0はローカル検証版です。
 
 ## 記録と表示
 
-- 拡張内でURLを分類し、固定サービスIDだけをローカルのCollectorへ送ります。完全URL・タイトル・検索語・アカウント名・タブID・プロフィール名・ページ本文は送信/保存しません。クラウド通信、LLM、画面操作は使いません。
+- 拡張内でURLを分類し、既定では固定サービスIDだけをローカルのCollectorへ送ります。追加同意が有効な場合だけ、未対応サイトのホスト名も送信・保存します。完全URL、パス、クエリ、フラグメント、URL内のユーザー名・パスワード、タイトル、タブID、プロフィール名、ページ本文は送りません。クラウド送信・LLM・画面操作は使いません。ホスト名に含まれる組織名・識別情報は除去できず、匿名化機能ではありません。
 - `tabs` はURL取得、`nativeMessaging` はローカル通信、`alarms` は30秒間隔の再接続確認に使います。コンテンツスクリプト、閲覧履歴API、全ページへのスクリプト注入はありません。
 - 同じサービスはブラウザやタブをまたいで1行にまとまります。既定の「サービス別（最前面）」は前面区間だけを置換し、ブラウザとサービスを二重加算しません。「状態をまとめる」「状態別に見る」は元のアプリ単位です。
-- 拡張未接続・内部ページ・権限不足・対応外の表示・過去データは `Edge（未取得）` / `Chrome（未取得）`。取得できた未分類HTTP(S)サイトは `その他のWeb`。未知のホスト名も保存しません。
+- 拡張未接続・内部ページ・権限不足・対応外の表示・過去データは `Edge（未取得）` / `Chrome（未取得）`。未対応HTTP(S)サイトは、追加同意が無効なら `その他のWeb`、有効ならホスト名で表示します。IPアドレス、localhost等の単一ラベル名、不正なホスト名は `その他のWeb` にまとめます。
 - Incognito / InPrivateは対象外。既存Collectorがブラウザの存在を記録すること自体は変わりません。タイトル保存は既定falseのままにしてください。
 - 前面時間は視聴時間・集中時間ではありません。バックグラウンド音声、Picture-in-Picture、PWA、分割表示の厳密な可視性は対象外。APIがsplitViewIdを提供する分割タブは未取得扱い。Edge等で同情報がない場合の動作は要実機検証。
 
 ## 導入（利用者が実行）
+
+### 表示名とホスト名の扱い
+
+YouTube、Twitch、Gmail、GitHub、Netflix、U-NEXT（video.unext.jp）、ChatGPT（Web）、Claude（Web）、Geminiは初期対応です。すべてのサービスを列挙する設計にはせず、未対応サイトはホスト名で補います。ユーザーによる名前の登録は必須ではありません。表示名編集・複数ホストの手動グループ化は未実装です。
+
+例えばGmail、Gemini、`drive.google.com` は別行、`keio.jp` と `portal.keio.jp` も別行です。最上位のドメインへ一括集約せず、`www` も自動除去しません。英字は小文字化し末尾ドットを除去、国際化ドメインはASCII（Punycode）表記で保存・表示します。ホスト名の最大長は253文字です。初期対応サービス以外はサブドメインの数に応じて行が増えます。
+
+ホスト名を記録する場合は、共通の `collector.settings.json` に以下を設定し、Collectorを再起動します。
+
+```json
+"enableBrowserTracking": true,
+"storeBrowserHostnames": true,
+"storeWindowTitles": false
+```
+
+これは既存JSONオブジェクトへ追加・変更する設定部分です。配布時の既定値はすべてfalse。ホスト名には所属組織や個人用サブドメインが含まれ得ます。DBはローカル平文で、暗号化・保存期限・サイト別除外は未実装です。記録したくないサイトがある場合はホスト名保存を有効にしないでください。設定は再起動時に反映され、無効化後も過去の記録は表示されます。過去に保存しなかったホスト名は復元できません。
+
+### 拡張とホストの設定
 
 表示だけを先に試す場合は検証版の `Run-Demo.cmd` を使います。専用の `data/demo.db` にサービス切替の合成データを作り、DEMO表示のViewerを開きます。拡張やホスト登録は不要です。
 
@@ -33,10 +51,12 @@ Chromeは `-Browser Chrome` に置換します。EdgeとChromeでIDが異なる�
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Register-BrowserHost.ps1 -Browser Edge -HostExecutable .\browser-host\WinTracker.BrowserHost.exe -ExtensionId '拡張画面に表示された32文字のID'
 ```
 
-4. 旧Collectorを `Stop-Collector.cmd` で正常停止し、旧フォルダ・DB・設定をバックアップします。新フォルダへ `data` と `collector.settings.json` を移行し、その設定に `"enableBrowserTracking": true` を追加します。`storeWindowTitles` はfalseを推奨。自動起動設定がある場合は起動先も確認してください。Collectorは同時に1つだけ起動します。
+4. 旧Collectorを `Stop-Collector.cmd` で正常停止し、DB・設定をバックアップします。新フォルダへ `data` と `collector.settings.json` を移行し、その設定に `"enableBrowserTracking": true` を追加します。未対応サイトのホスト名も必要なら上記の追加設定を行います。`storeWindowTitles` はfalseを推奨。自動起動設定がある場合は起動先も確認してください。Collectorは同時に1つだけ起動します。
 5. 新Collectorを起動し、拡張を再読み込みします。拡張ボタンのツールチップで接続状態を確認できます。「!」は接続待ちです。ブラウザ内でサービスを切り替え、保存周期（既定15秒）後にViewerを更新します。Viewer自体はこの版でもデータを自動再読込しません。
 
 ソースからビルドする場合は `dotnet build WinTracker.BrowserHost -c Release`。ホストのexeは同プロジェクトの `bin/Release/net10.0/` にあります。FDホストの実行には.NET 10が必要で、SC配布物では同梱されます。
+
+更新時はCollector・BrowserHost・拡張を同じ版へ揃えます。同じ配置先を維持する場合、登録済みの `browser-host/native-host-*.json` を引き継げば再登録は不要です。拡張も読み込み済みのフォルダを更新し、拡張管理画面で再読み込みしてください。ホストの配置先または拡張IDが変わる場合は、旧登録を解除して新しいパス・IDで登録し直します。ブラウザ自体の強制終了や恒久的な実行ポリシー変更は不要です。
 
 ### 接続できないとき
 
@@ -68,7 +88,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Register-Brows
 
 拡張 → Native Messagingホスト → 同一Windowsユーザー・セッション用の名前付きパイプ → Collectorの既存保存ループ → SQLite → Viewer。
 
-新NuGet依存はありません。ホストはDBを開かず、標準入出力の長さ付きJSONを中継します。フレーム上限4096バイト、未知JSONフィールド拒否、CollectorでサービスIDを許可リスト検証。名前付きパイプはCurrentUserOnlyで、同じユーザーの悪意あるプロセスまで認証する仕組みではありません。
+新NuGet依存はありません。ホストはDBを開かず、標準入出力の長さ付きJSONを中継します。フレーム上限4096バイト、未知JSONフィールド拒否、Collectorで固定IDの許可リストと同意済みホスト名の形式を検証します。名前付きパイプはCurrentUserOnlyで、同じユーザーの悪意あるプロセスまで認証する仕組みではありません。
+
+追加同意はCollectorの照会メッセージごとに通知し、拡張は厳密にbooleanのtrueを受け取った場合だけホスト名を送ります。Collectorの状態管理とSQLite保存層でも独立して設定と形式を検査します。固定ID以外は `host:<正規化したホスト名>` の形式のみ許可し、既存の `service_id` 列を利用するため0.3.0からのスキーマ変更はありません。Viewerは現在の記録設定にかかわらず保存済みの有効なホスト名を表示します。
 
 ブラウザwindowIdとHWNDを直接対応付けません。OSの前面が変わったときに古い観測を破棄し、新しいnonce付き照会を拡張へ送ります。拡張は実際にフォーカスされた通常ウィンドウの選択タブを再取得し、Collectorは2秒以内かつ同じ前面HWNDの応答だけを採用します。接続ごとに区別し、複数プロフィールが同時にフォーカスを主張した場合は未取得にします。
 
@@ -78,7 +100,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Register-Brows
 
 自動テスト: サービス切替による区間分割、旧スキーマ読取・追加列移行、プライバシーの保存制約、前面ウィンドウ変更／遅延応答／期限切れ／プロファイル競合、実名前付きパイプでの照会・切断、URL分類・フォーカス喪失・タブ移動、サービス別グラフの合計とラベル。
 
-実ブラウザでの拡張導入、2ウィンドウ／複数プロフィールの手動操作、ロック／復帰、長期負荷、WinUI実画面確認は未実施です。導入して「確実に計測できた」とみなす前に以下を確認してください。
+0.3.0の実Edgeでは、利用者による通常起動元でのホスト登録後、拡張のCONNECTEDと実DBのサービス記録を確認しました。開発ツール側で見える登録と通常起動元で見える登録が異なった事例であり、Windows内部の原因まで断定していません。0.3.1のホスト名記録は自動テストで検証し、Computer Useは使いません。Chrome実機、2ウィンドウ／複数プロフィール、ロック／復帰、長期負荷、今回のWinUI目視確認は未完了です。実際の利用環境で以下を確認してください。
 
 | 操作 | 期待結果 |
 | --- | --- |
@@ -89,5 +111,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\Register-Brows
 | 別プロフィール・InPrivate・内部ページ | 不確実な情報は未取得、プライベートURLは保存なし |
 | 拡張停止・Collector停止／再起動 | 未取得へ切替し、再接続後に復帰 |
 | 今日／直近7日、3表示モード切替 | 行・凡例・合計が対応し、旧データも表示 |
+| ホスト名保存をtrueにして未対応サイトへ | サイトのホスト名が独立した行になり、URLのパス・検索語は残らない |
+| falseに戻しCollector再起動 | 新規の未対応サイトはその他のWeb、過去のホスト名行は残る |
 
 参考: [Tabs API](https://developer.chrome.com/docs/extensions/reference/api/tabs)、[Windows API](https://developer.chrome.com/docs/extensions/reference/api/windows)、[Native Messaging](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging)、[Edge Native Messaging](https://learn.microsoft.com/en-us/microsoft-edge/extensions/developer-guide/native-messaging)。

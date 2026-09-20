@@ -73,7 +73,16 @@
 
 追跡途中の区間は `AppIntervalTracker` 内部の「開始時刻＋最新AppSnapshot」で表す。確定前の終了時刻は保持せず、書込時にAppEventへ変換する。SQLiteに保存済みの区間やスキーマを変える整理ではない。
 
+## 任意のブラウザ連携
+
+`browser-extension/services.js` が前面の選択タブを分類し、`WinTracker.BrowserHost` がNative Messagingとユーザー限定の名前付きパイプを中継する。ホストはDBにアクセスしない。`BrowserServiceHub` / `BrowserServiceState` がOSの前面HWND・照会nonce・期限を照合してから既存の区間保存へ渡す。
+
+固定サービスIDに加え、`storeBrowserHostnames` を明示的に有効化した場合だけ `host:<ホスト名>` を `service_id` へ保存する。設定は拡張への各照会・Collectorの採用判定・保存層の3か所で適用する。識別子の許可規則と表示名、前面区間の置換はSharedの `BrowserServices` に置き、既存のViewer描画へ流す。新しいUI描画系やテーブルは増やさない。完全URL・タイトルの取得を拡張から追加しない。
+
+配布設定はブラウザ連携・ホスト名保存ともfalse。既知サービスの表示名編集、任意ホストのグループ化、保存期限は今回の範囲外。
+
 ## 関連ドキュメント
-- ブラウザサービス連携: `docs/browser-services.md`（v0.3.0）
+
+- ブラウザサービス連携: `docs/browser-services.md`（v0.3.1）
 - Collector要件: `docs/requirements_collector.md`
 - Viewer要件: `docs/requirements_viewer.md`

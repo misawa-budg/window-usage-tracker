@@ -4,7 +4,7 @@ Windows 11 向けの軽量なアプリケーション利用時間トラッカー
 `Collector` がアプリ状態（`Active / Open / Minimized`）を SQLite に自動蓄積し、`Viewer` が 24h / 1week のタイムラインで時間の使い方を可視化します。  
 `Active` は Windows の foreground 特性上、同時刻に原則1アプリです。
 
-**v0.3.0** では、Edge／Chromeの前面タブをYouTube・Twitch・Gmail・GitHub等のサービス単位で表示する任意機能を追加しています。ブラウザ拡張＋ローカルホストの導入が必要で、既定では収集無効です。URLやタイトルは保存しません。[導入手順・プライバシー・検証範囲](docs/browser-services.md)を先に確認してください。v0.2.0には含まれません。
+**v0.3.1** では、Edge／Chromeの前面タブをサービス単位で表示できます。YouTube・Gmail・Gemini等は表示名を自動設定し、別途同意設定を有効にすると未対応サイトもホスト名（例: `portal.example`）で表示します。ブラウザ拡張＋ローカルホストの導入が必要で、配布時はブラウザ連携・ホスト名保存とも無効です。拡張は完全URL・タイトル・ページ本文を保存しませんが、ホスト名自体にも機微な情報が含まれ得ます。[導入手順・プライバシー・検証範囲](docs/browser-services.md)を先に確認してください。公開済みv0.2.0には含まれず、0.3.0はローカル検証版でした。
 
 ## 構成
 
@@ -29,10 +29,12 @@ Windows 11 向けの軽量なアプリケーション利用時間トラッカー
 ### 既存データを引き継ぐ更新
 
 1. 旧Viewerを閉じ、旧Collectorを正常停止します。対応版は `Stop-Collector.cmd`、コンソール起動の旧版はCtrl+Cを使い、終了を確認します。非表示の旧版が停止できない場合は強制終了や上書きをせず、停止方法を確認してください。
-2. 旧フォルダ全体を別の場所へバックアップします。DBだけを稼働中にコピーしないでください。
+2. 停止後の `data` フォルダと `collector.settings.json` を別の場所へバックアップします。独自の起動ファイルや `browser-host/native-host-*.json` があれば併せて保持します。DBだけを稼働中にコピーしないでください。
 3. 新ZIPを別フォルダへ展開し、旧版の `data` フォルダと `collector.settings.json` を引き継ぎます。DB保存先を変更している場合は、設定の `sqliteFilePath` の参照先も確認します。
 4. 新版のViewerで過去の記録を確認してからCollectorを起動します。同じWindowsセッションではCollectorは1つだけ動作します。
 5. 自動起動を別途登録している場合は、登録先パスとの一致を確認します。このZIPはタスクやサービスを自動登録しません。正常動作を確認するまでバックアップは残してください。
+
+ブラウザ連携を利用中なら、Collector・BrowserHost・拡張を同じ版へ更新してください。同じ設置先ではホスト登録用JSONを引き継ぎ、設置先を変える場合は通常のユーザー起動元で登録を更新します。展開した拡張のフォルダを移動するとIDが変わる場合があるため、元の読み込み先を更新して拡張管理画面で再読み込みします。
 
 v0.2.0以降の既定ではウィンドウタイトルを保存しません。引き継いだ設定で `storeWindowTitles: true` を指定していれば保存が続きます。既存タイトルと過去の状態集約結果は自動変更されません。
 
@@ -79,6 +81,7 @@ dotnet run --project .\WinTracker.Viewer\WinTracker.Viewer.csproj -- --demo
 - 相対DBパスの基準は開発時にソリューションルート、Portable版ではバンドルルートです。明示する場合は両プロセスに `WINTRACKER_HOME` を渡してください。いずれも見つからない場合は `%LOCALAPPDATA%/WinTracker` を使います。
 - `rescanIntervalSeconds` は全列挙の再確認間隔（既定300秒）。`checkpointIntervalSeconds` は継続区間の保存間隔（既定15秒、1〜300秒）です。状態遷移で閉じた区間は30件またはチェックポイントでflushします。
 - `storeWindowTitles` は既定falseです。タイトルはフィルタ判定に一時使用しますが、標準出力には出しません。trueにするとDBへ平文保存されます。過去に保存したタイトルは自動削除されません。
+- `enableBrowserTracking` と `storeBrowserHostnames` は既定falseです。前者は拡張連携、後者は未対応サイトのホスト名保存への追加同意です。後者だけtrueでもブラウザ連携は開始しません。変更後はCollectorを再起動します。無効化しても過去のホスト名は削除されません。DBはローカルの平文で、共有・画面共有時にも注意してください。
 - ロック等で入力デスクトップが利用できない場合、または観測間隔が保存間隔の2倍を超えた場合は、最後の観測時刻で区間を切ります。未観測時間を使用時間に補完しません。ロック境界には保存間隔程度の誤差があり、正常終了時も最後の観測以降を足しません。
 - `Active` は前面アプリであり、キー入力や実作業時間の証明ではありません。放置中の無操作判定は未実装です。複数ウィンドウの集約は `Active > Open > Minimized`。前面がなくても、開いている対象ウィンドウが1つあればOpenです（新版Collectorから適用、過去データは変更しません）。
 - `Running` は観測対象ウィンドウの3状態を統合した表示であり、ウィンドウのない全プロセスの稼働時間ではありません。
@@ -93,6 +96,7 @@ dotnet run --project .\WinTracker.Viewer\WinTracker.Viewer.csproj -- --demo
 dotnet build .\WinTracker.slnx
 dotnet test .\WinTracker.Collector.Tests\WinTracker.Collector.Tests.csproj
 dotnet test .\WinTracker.Viewer.Tests\WinTracker.Viewer.Tests.csproj
+node --test browser-extension/tests/*.test.js
 dotnet list .\WinTracker.slnx package --vulnerable --include-transitive
 ```
 
