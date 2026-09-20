@@ -148,8 +148,6 @@ Desktopの実DB（約41.2 MiB）をReadOnlyで参照。2026-09-10〜09-16の7日
 - 新版の `--stop` による正常終了と、既存の `Run-Collector-Hidden.vbs` による再起動を確認。再起動後はDesktopのCollectorが1プロセスで稼働し、新規記録が増えることと移行済み行が不変なことを確認した。ログオンし直す試験や長時間の運用試験までは行っていない。
 - 新規記録には今回までのActive > Open > Minimized、15秒チェックポイント、既定のタイトル非保存が適用される。過去のタイトルや状態は書き換えていない。既存データの意味と新規収集ルールの変更は区別する。
 
-## その他の仕様の根拠
-
 ## v0.2.0公開前検証（2026-09-20）
 
 - Windows App SDKを1.7.250606001から安定版2.5.1へ更新。依存先の要求に合わせWindows SDK BuildToolsを10.0.26100.4654へ更新した。WinUI 3、Collectorの.NET 10、Viewer/Sharedの.NET 8と既存の責務分離は維持。アプリバージョンはDirectory.Build.propsで0.2.0に統一。
@@ -158,10 +156,10 @@ Desktopの実DB（約41.2 MiB）をReadOnlyで参照。2026-09-10〜09-16の7日
 - `release.ps1` でCollector/Viewer単体およびPortableのFD/SC全6ZIPを生成。README、移行手順、プロジェクトLICENSE、設計・検証資料と、依存パッケージ提供のライセンス・通知・NuGetメタデータを同梱する。SCでは同梱.NETランタイムのライセンス・third-party noticesも含む。
 - 作成前のDB/log混入拒否を合成の拡張子テストで確認し、非空OutputRoot拒否も確認した。作成後は `scripts/Test-ReleasePackages.ps1` で6ZIPすべての必須ファイル、DB/log/env不在、依存通知、ViewerのFD/SCランタイム構成、SCのWinUI DLLを確認。アーカイブ作成中の読み取りはファイルロックで拒否されたため、完了後に再実行して成功した。
 - Portable SCのZIPを独立した `artifacts/release-smoke-20260920` に展開し、Collectorのseedコマンドで専用demo.dbへ合成2,793行を生成。展開先のViewerをDEMOモードで起動した。配布元フォルダへseedせず、配布ZIPにDBは含めない。
-- Windows操作スキルで1426×746の実画面を確認。今回は自動入力が成功し、今日→直近7日→状態別表示、スクロール後の選択アプリ7行、固定日付・期間欄と更新ボタンの動作を確認した。起動中のDesktop Collectorと実DBには変更を行っていない。
+- Windows操作スキルで1426×746の実画面を確認。今回は自動入力が成功し、今日→直近7日→状態別表示、スクロール後の選択アプリ7行、固定日付・期間欄を確認した。その後の更新ボタン確認ではユーザーのEscapeによる画面操作停止が返ったため、更新ボタンの動作は今回未確認とし、以後の画面操作は中止。起動中のDesktop Collectorと実DBには変更を行っていない。
 - 別PC／クリーンOS、FD Viewerのランタイム導入、ARM64、高DPI・最小サイズ、DST境界、長期運用と更新後の性能再計測は未検証。DLL同梱・実機起動の確認を、全環境での保証とは扱わない。Viewerには無操作検出がなく、厳密な勤怠や課金用ではない。
 
-### 参考リンク
+## その他の仕様の根拠
 
 - [Windows console HandlerRoutine](https://learn.microsoft.com/en-us/windows/console/handlerroutine)
 - [SetConsoleCtrlHandlerのログオフ/シャットダウン制約](https://learn.microsoft.com/en-us/windows/console/setconsolectrlhandler)
