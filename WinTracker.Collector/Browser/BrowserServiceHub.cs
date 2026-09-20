@@ -7,7 +7,8 @@ internal sealed class BrowserServiceHub : IAsyncDisposable
 {
     private sealed record Client(Guid Id, string Browser, Channel<BrowserMessage> Outgoing);
     private readonly object _gate = new();
-    private readonly BrowserServiceState _state = new();
+    private readonly BrowserServiceState _state;
+    private readonly bool _storeBrowserHostnames;
     private readonly Dictionary<Guid, Client> _clients = [];
     private readonly List<Task> _connections = [];
     private readonly CancellationTokenSource _stop = new();
@@ -18,8 +19,11 @@ internal sealed class BrowserServiceHub : IAsyncDisposable
     private readonly Task _refreshLoop;
     private string? _publishedService;
 
-    public BrowserServiceHub(Action changed, Func<BrowserForeground> foreground, string? pipeName = null)
+    public BrowserServiceHub(Action changed, Func<BrowserForeground> foreground, string? pipeName = null,
+        bool storeBrowserHostnames = false)
     {
+        _storeBrowserHostnames = storeBrowserHostnames;
+        _state = new(storeBrowserHostnames);
         _changed = changed;
         _foreground = foreground;
         _pipeName = pipeName ?? BrowserWire.PipeName;
@@ -52,7 +56,8 @@ internal sealed class BrowserServiceHub : IAsyncDisposable
     private void Probe(Client client)
     {
         string? id = _state.BeginProbe(client.Id, client.Browser, DateTimeOffset.UtcNow);
-        if (id is not null) client.Outgoing.Writer.TryWrite(new("probe", RequestId: id));
+        if (id is not null) client.Outgoing.Writer.TryWrite(new("probe", RequestId: id,
+            StoreBrowserHostnames: _storeBrowserHostnames));
     }
 
     private void PublishChange()

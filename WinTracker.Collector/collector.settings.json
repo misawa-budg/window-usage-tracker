@@ -1,5 +1,6 @@
 {
   "enableBrowserTracking": false,
+  "storeBrowserHostnames": false,
   "rescanIntervalSeconds": 300,
   "checkpointIntervalSeconds": 15,
   "storeWindowTitles": false,

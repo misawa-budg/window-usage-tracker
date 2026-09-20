@@ -4,8 +4,8 @@ internal readonly record struct BrowserForeground(string ExeName, string Hwnd);
 
 // Pure state machine. Browser IDs are not HWNDs: ask for a fresh focused-tab sample
 // while the OS foreground remains unchanged, and reject late/replayed responses.
-// The hub serializes access; no URLs/titles enter this class.
-internal sealed class BrowserServiceState
+// The hub serializes access; no full URLs/titles enter this class.
+internal sealed class BrowserServiceState(bool storeBrowserHostnames = false)
 {
     private sealed record Probe(string Id, BrowserForeground Foreground, DateTimeOffset SentAt);
     private sealed record Observation(Guid Client, BrowserForeground Foreground, string Service, DateTimeOffset At);
@@ -50,7 +50,7 @@ internal sealed class BrowserServiceState
         if (!_pending.TryGetValue(client, out Probe? probe) || probe.Id != requestId) return false;
         _pending.Remove(client);
         if (probe.Foreground != _foreground || now < probe.SentAt || now - probe.SentAt > TimeSpan.FromSeconds(2)) return false;
-        if (!focused || !BrowserServices.IsKnown(service))
+        if (!focused || !BrowserServices.IsAllowed(service, storeBrowserHostnames))
         {
             if (_confirmed?.Client == client) _confirmed = null;
             return true;

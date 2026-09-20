@@ -9,10 +9,12 @@ internal sealed class SqliteEventWriter : IAppEventWriter
     private readonly List<AppEvent> _buffer = [];
     private bool _disposed;
     private readonly bool _storeWindowTitles;
+    private readonly bool _storeBrowserHostnames;
 
-    public SqliteEventWriter(string databasePath, bool storeWindowTitles = false)
+    public SqliteEventWriter(string databasePath, bool storeWindowTitles = false, bool storeBrowserHostnames = false)
     {
         _storeWindowTitles = storeWindowTitles;
+        _storeBrowserHostnames = storeBrowserHostnames;
         string? directoryPath = Path.GetDirectoryName(databasePath);
         if (!string.IsNullOrWhiteSpace(directoryPath))
         {
@@ -179,10 +181,10 @@ internal sealed class SqliteEventWriter : IAppEventWriter
         _insertCommand.Parameters["$title"].Value = appEvent.Title;
         _insertCommand.Parameters["$state"].Value = appEvent.State;
         _insertCommand.Parameters["$source"].Value = appEvent.Source;
-        // Only the fixed, privacy-preserving vocabulary is persisted, never arbitrary browser strings.
+        // Validate again at the persistence boundary; hostnames require explicit local opt-in.
         _insertCommand.Parameters["$service_id"].Value = appEvent.State == "Active" &&
             WinTracker.Shared.Analytics.BrowserServices.IsBrowser(appEvent.ExeName) &&
-            WinTracker.Shared.Analytics.BrowserServices.IsKnown(appEvent.ServiceId)
+            WinTracker.Shared.Analytics.BrowserServices.IsAllowed(appEvent.ServiceId, _storeBrowserHostnames)
                 ? appEvent.ServiceId! : DBNull.Value;
     }
 }

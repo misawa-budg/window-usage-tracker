@@ -8,6 +8,7 @@ public sealed record CollectorSettings
     public int CheckpointIntervalSeconds { get; init; } = 15;
     public bool StoreWindowTitles { get; init; } = false;
     public bool EnableBrowserTracking { get; init; } = false;
+    public bool StoreBrowserHostnames { get; init; } = false;
     public string SqliteFilePath { get; init; } = Path.Combine("data", "collector.db");
 
     public string[] ExcludedExeNames { get; init; } =

@@ -50,6 +50,7 @@ public static class CollectorSettingsLoader
                 CheckpointIntervalSeconds = Math.Clamp(parsed.CheckpointIntervalSeconds, 1, 300),
                 StoreWindowTitles = parsed.StoreWindowTitles,
                 EnableBrowserTracking = parsed.EnableBrowserTracking,
+                StoreBrowserHostnames = parsed.StoreBrowserHostnames,
                 SqliteFilePath = sqliteFilePath,
                 ExcludedExeNames = excludedExeNames
             };

@@ -5,6 +5,42 @@ namespace WinTracker.Viewer.Tests;
 
 public sealed class ServiceTimelineTests
 {
+    [Theory]
+    [InlineData("host:keio.jp", true)]
+    [InlineData("host:portal.keio.jp", true)]
+    [InlineData("host:xn--r8jz45g.example", true)]
+    [InlineData("host:localhost", false)]
+    [InlineData("host:127.0.0.1", false)]
+    [InlineData("host:[::1]", false)]
+    [InlineData("host:UPPER.example", false)]
+    [InlineData("host:example.com.", false)]
+    [InlineData("host:-bad.example", false)]
+    [InlineData("host:bad-.example", false)]
+    [InlineData("host:a..example", false)]
+    [InlineData("host:user@example.com", false)]
+    [InlineData("host:example.com:443", false)]
+    [InlineData("host:example.com/private?token=1", false)]
+    [InlineData("host:example.com\n", false)]
+    [InlineData("host:日本語.example", false)]
+    [InlineData(null, false)]
+    public void HostIdentifiersAreBoundedCanonicalDnsNames(string? id, bool expected) =>
+        Assert.Equal(expected, BrowserServices.IsHostId(id));
+
+    [Fact]
+    public void HostRowsPreserveSubdomainsAndTotalsWithoutNeedingLabelConfiguration()
+    {
+        var start = DateTimeOffset.UnixEpoch;
+        string[] services = ["gmail", "gemini", "host:drive.google.com", "host:keio.jp", "host:portal.keio.jp"];
+        var projected = BrowserServices.ProjectForeground(services.Select((id, i) =>
+            new AppStateIntervalRow("msedge.exe", "Active", start.AddMinutes(i), start.AddMinutes(i + 1), id)).ToArray());
+        Assert.Equal(5, projected.Select(x => x.ExeName).Distinct().Count());
+        Assert.Equal(300, projected.Sum(x => (x.StateEndUtc - x.StateStartUtc).TotalSeconds));
+        Assert.Equal(new[] { "Gmail", "Gemini", "drive.google.com", "keio.jp", "portal.keio.jp" },
+            projected.Select(x => AppChoice.FormatDisplayName(x.ExeName)));
+        Assert.False(BrowserServices.IsHostId("host:" + new string('a', 64) + ".example"));
+        Assert.False(BrowserServices.IsHostId("host:" + string.Join('.', Enumerable.Repeat(new string('a', 63), 4))));
+    }
+
     [Fact]
     public void TwoBrowsersShareOneServiceRowWithoutAddingTheirParentTotals()
     {

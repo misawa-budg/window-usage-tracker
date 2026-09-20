@@ -23,6 +23,33 @@ public sealed class BrowserBridgeTests
         Assert.Null(state.GetService(Edge, Now));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task HostConsentIsSentOnEveryProbeAndEnforcedAtAcceptance(bool enabled)
+    {
+        string name = "WinTracker-host-test-" + Guid.NewGuid().ToString("N");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+        await using var hub = new BrowserServiceHub(() => { }, () => Edge, name, storeBrowserHostnames: enabled);
+        using var pipe = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
+        await pipe.ConnectAsync(timeout.Token);
+        await BrowserWire.WriteAsync(pipe, new("hello", Browser: "edge"), timeout.Token);
+        for (int i = 0; i < 2; i++)
+        {
+            var probe = await BrowserWire.ReadAsync(pipe, timeout.Token);
+            Assert.Equal("probe", probe?.Kind);
+            Assert.Equal(enabled, probe!.StoreBrowserHostnames);
+            if (i == 0) await BrowserWire.WriteAsync(pipe, new("changed"), timeout.Token);
+        }
+        var state = new BrowserServiceState(enabled);
+        state.SetForeground(Edge);
+        Guid client = Guid.NewGuid();
+        state.Accept(client, state.BeginProbe(client, "edge", Now), true, "host:portal.example", Now);
+        Assert.Equal(enabled ? "host:portal.example" : null, state.GetService(Edge, Now));
+        state.Accept(client, state.BeginProbe(client, "edge", Now), true, "host:portal.example/private", Now);
+        Assert.Null(state.GetService(Edge, Now));
+    }
+
     [Fact]
     public void ConfirmedServiceExpiresAndDisconnectImmediatelyInvalidatesIt()
     {

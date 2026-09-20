@@ -18,7 +18,8 @@ internal static class ForegroundCollector
             signals.Writer.TryWrite(CollectReason.WinEvent);
         }
         await using var browserHub = settings.EnableBrowserTracking
-            ? new BrowserServiceHub(RequestCapture, WindowSnapshotProvider.CaptureBrowserForeground) : null;
+            ? new BrowserServiceHub(RequestCapture, WindowSnapshotProvider.CaptureBrowserForeground,
+                storeBrowserHostnames: settings.StoreBrowserHostnames) : null;
         using var hookPump = new WinEventHookPump(reason =>
         {
             browserHub?.ForegroundChanged();

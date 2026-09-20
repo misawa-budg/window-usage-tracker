@@ -7,7 +7,7 @@ namespace WinTracker.Shared.Browser;
 
 // Both native messaging and the local pipe use bounded, length-prefixed UTF-8 JSON.
 public sealed record BrowserMessage(string Kind, string? Browser = null, string? RequestId = null,
-    bool Focused = false, string? ServiceId = null);
+    bool Focused = false, string? ServiceId = null, bool? StoreBrowserHostnames = null);
 
 public static class BrowserWire
 {

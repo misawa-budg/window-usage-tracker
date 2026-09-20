@@ -90,6 +90,52 @@ public sealed class BrowserPersistenceTests
         finally { SqliteConnection.ClearAllPools(); File.Delete(path); }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void HostStorageRequiresOptInAndStillRejectsPrivatePayloads(bool enabled)
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"wintracker-hosts-{Guid.NewGuid():N}.db");
+        try
+        {
+            using (var writer = new SqliteEventWriter(path, storeBrowserHostnames: enabled))
+            {
+                foreach (var (exe, state, id) in new[] {
+                    ("msedge.exe", "Active", "host:portal.example"),
+                    ("msedge.exe", "Active", "host:portal.example/private?secret=1"),
+                    ("msedge.exe", "Active", "host:127.0.0.1"),
+                    ("msedge.exe", "Open", "host:portal.example"),
+                    ("editor.exe", "Active", "host:portal.example"),
+                    ("msedge.exe", "Active", "gemini") })
+                    writer.Write(new(Start, Start.AddSeconds(10), exe, 1, "0x1", "private", state, "test", id));
+            }
+            using var db = new SqliteConnection($"Data Source={path}");
+            db.Open();
+            using var cmd = db.CreateCommand();
+            cmd.CommandText = "SELECT service_id, title FROM app_events ORDER BY id;";
+            using var reader = cmd.ExecuteReader();
+            var stored = new List<string?>();
+            while (reader.Read()) { stored.Add(reader.IsDBNull(0) ? null : reader.GetString(0)); Assert.Empty(reader.GetString(1)); }
+            Assert.Equal(new string?[] { enabled ? "host:portal.example" : null, null, null, null, null, "gemini" }, stored);
+        }
+        finally { SqliteConnection.ClearAllPools(); File.Delete(path); }
+    }
+
+    [Fact]
+    public void HostnameSettingDefaultsOffAndSurvivesSettingsNormalization()
+    {
+        Assert.False(new WinTracker.Shared.Configuration.CollectorSettings().StoreBrowserHostnames);
+        string path = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(path, "{}");
+            Assert.False(WinTracker.Shared.Configuration.CollectorSettingsLoader.Load(path).StoreBrowserHostnames);
+            File.WriteAllText(path, "{\"enableBrowserTracking\":true,\"storeBrowserHostnames\":true}");
+            Assert.True(WinTracker.Shared.Configuration.CollectorSettingsLoader.Load(path).StoreBrowserHostnames);
+        }
+        finally { File.Delete(path); }
+    }
+
     private sealed class Recorder : IAppEventWriter
     {
         public List<AppEvent> Events { get; } = [];
