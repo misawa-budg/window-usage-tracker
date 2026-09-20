@@ -12,7 +12,7 @@ foreach ($mode in @("fd", "sc")) {
         $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $path).Path)
         try {
             $names = @($zip.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
-            $required = @("README.md", "LICENSE", "docs/verification.md")
+            $required = @("README.md", "LICENSE", "docs/verification.md", "docs/usage.md")
             if ($kind -eq "window-usage-tracker-portable") {
                 $required += @("collector/WinTracker.Collector.exe", "viewer/WinTracker.Viewer.exe",
                     "browser-host/WinTracker.BrowserHost.exe", "browser-extension/manifest.json",

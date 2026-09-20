@@ -16,6 +16,7 @@
   - 現在の主な内容:
     - 設定・保存先の解決（`Configuration/`）
     - 区間描画モデルと境界走査（`TimelineLayoutBuilder` / `IntervalSweep`）
+    - 表示モードごとの区間（`TimelineDisplayData`）と色・時刻の整形（`TimelinePresentation`）
     - 状態優先度の共通規則（`AppStatePriority`: Active > Open > Minimized）
     - `UsageQueryWindow`
     - `TimelineUsageRow`
@@ -66,12 +67,19 @@
 | いつ観測するか | WinEventHookPump → ForegroundCollector |
 | 何を1アプリとし、状態をどう決めるか | WindowSnapshotProvider → SharedのAppStatePriority |
 | いつからいつまでを保存するか | AppIntervalTracker → SqliteEventWriter |
-| DBがどう画面になるか | MainWindow.ReloadAsync → SqliteTimelineQueryService.QueryStateIntervals → TimelineLayoutBuilderのFromIntervals系 |
-| 区間がどう描かれるか | TimelineViewModels → TimelineTrack（一覧）/ XAML（アプリ別） |
+| DBがどう画面になるか | MainWindow.ReloadAsync → SqliteTimelineQueryService → TimelineDisplayData → TimelineLayoutBuilder |
+| 色・時刻をどう表示するか | TimelinePresentation → TimelineViewModelFactory → TimelineViewModels |
+| 区間がどう描かれるか | TimelineTrack（一覧）/ XAML（アプリ別） |
 
 旧バケット方式の描画APIと、Viewerの未使用SQLは撤去済み。Collectorの `report` は時間バケットのサンプルを表示するため、そちらのQueryTimelineとTimelineUsageRowは現役であり残す。イベントキュー・チェックポイント・セッション判定・終了時flushも、保存の正しさを担うので残す。
 
 追跡途中の区間は `AppIntervalTracker` 内部の「開始時刻＋最新AppSnapshot」で表す。確定前の終了時刻は保持せず、書込時にAppEventへ変換する。SQLiteに保存済みの区間やスキーマを変える整理ではない。
+
+## 表示処理の境界
+
+- `TimelineDisplayData` は読込・表示モード変更時に1回だけ生成し、一覧・選択欄・アプリ別行で使い回す。Runningでも一覧はActiveだけを使う。
+- `TimelineLayoutBuilder` は区間の切り取り・重複解消・横幅を計算し、色と文字列は `TimelinePresentation`、WinUIのBrushと画面モデルへの変換は `TimelineViewModelFactory` が担当する。
+- MainWindowには操作・選択状態・読込の制御を残す。新しいMVVMフレームワークやDI基盤は追加しない。
 
 ## 任意のブラウザ連携
 
@@ -81,8 +89,11 @@
 
 配布設定はブラウザ連携・ホスト名保存ともfalse。既知サービスの表示名編集、任意ホストのグループ化、保存期限は今回の範囲外。
 
+分類の入出力例は `tests/browser-services.json` をJavaScriptとC#のテストで共用する。拡張での分類・Collectorでの検査は別の信頼境界なので、実装上の検査を1つにまとめない。分類規則を変えるときは共通ケースも更新する。
+
 ## 関連ドキュメント
 
-- ブラウザサービス連携: `docs/browser-services.md`（v0.3.1）
+- ブラウザサービス連携: `docs/browser-services.md`
+- 利用・開発手順: `docs/usage.md`
 - Collector要件: `docs/requirements_collector.md`
 - Viewer要件: `docs/requirements_viewer.md`
