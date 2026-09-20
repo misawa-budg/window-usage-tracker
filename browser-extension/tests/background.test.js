@@ -34,6 +34,12 @@ test("worker emits only service samples, invalidates asynchronous reads and reco
     await listener({ kind: "probe", requestId: "a".repeat(32) });
     assert.deepEqual(messages.at(-1), { kind: "sample", requestId: "a".repeat(32), focused: true, serviceId: "gmail" });
     assert.ok(!JSON.stringify(messages).includes("secret"));
+    tab.url = "https://portal.example/private?secret=1";
+    for (const consent of [undefined, false, "true", true, undefined]) {
+      await listener({ kind: "probe", requestId: "a".repeat(32), storeBrowserHostnames: consent });
+      assert.equal(messages.at(-1).serviceId, consent === true ? "host:portal.example" : "other-web");
+    }
+    assert.ok(!JSON.stringify(messages).includes("secret"));
     const before = messages.length;
     api.tabs.onUpdated.listeners[0](1, { url: "https://youtube.com/" }, { active: false });
     assert.equal(messages.length, before);
@@ -74,7 +80,7 @@ test("worker emits only service samples, invalidates asynchronous reads and reco
     assert.equal(request("get-diagnostics").attempts, 3);
     await ports[2].onMessage.listeners[0]({ kind: "ready" });
     assert.equal(request("get-diagnostics").state, "CONNECTED");
-    assert.equal(request("get-diagnostics").replies, 3);
+    assert.equal(request("get-diagnostics").replies, 8);
     assert.ok(request("get-diagnostics").lastReplyAt);
     // Delayed events from an old connection cannot change the new status.
     ports[1].onDisconnect.listeners[0]();

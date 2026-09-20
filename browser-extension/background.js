@@ -53,7 +53,8 @@ function connect() {
     if (message.kind === "ready") return;
     const capturedGeneration = generation;
     let serviceId = null;
-    try { serviceId = await readFocusedService(chrome); } catch { /* closed/navigated during the read */ }
+    try { serviceId = await readFocusedService(chrome, message.storeBrowserHostnames === true); }
+    catch { /* closed/navigated during the read */ }
     if (port !== connection || capturedGeneration !== generation) return;
     send(connection, { kind: "sample", requestId: message.requestId,
       focused: serviceId !== null, serviceId });
