@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
-using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -14,21 +13,12 @@ namespace WinTracker.Viewer;
 
 public sealed partial class MainWindow : Window
 {
-    private enum AppDisplayMode
-    {
-        Services,
-        Running,
-        StateDetails
-    }
-
     private const double DailyTrackWidth = 960.0;
     private const int TopAppCount = 8;
     private static readonly bool DemoMode = Environment.GetCommandLineArgs().Contains("--demo", StringComparer.OrdinalIgnoreCase);
     private const int DailyBucketMinutes = 5;
     private const int MinWindowWidth = 1100;
     private const int MinWindowHeight = 700;
-    private static readonly SolidColorBrush TransparentBrush =
-        new(Windows.UI.Color.FromArgb(0, 0, 0, 0));
 
     private readonly ObservableCollection<StateStackRowViewModel> _overviewDailyRows = [];
     private readonly ObservableCollection<StateLaneViewModel> _appDailyLanes = [];
@@ -38,7 +28,7 @@ public sealed partial class MainWindow : Window
     private readonly TimelineLayoutBuilder _layoutBuilder = new(topAppCount: TopAppCount);
     private readonly DispatcherQueueTimer _collectorStatusTimer;
 
-    private IReadOnlyList<ActiveIntervalRow> _activeIntervals = [];
+    private TimelineDisplayData _displayData = TimelineDisplayData.Create([], AppDisplayMode.Services);
     private IReadOnlyList<AppStateIntervalRow> _stateIntervals = [];
     private AppDisplayMode _appDisplayMode = AppDisplayMode.Services;
     private UsageQueryWindow _currentWindow = CreateLocalDay24hWindow();
@@ -141,7 +131,7 @@ public sealed partial class MainWindow : Window
         }
 
         _appDisplayMode = GetAppDisplayMode();
-        RebuildActiveIntervals();
+        RebuildDisplayData();
         if (GetRangeLabel() == "24h") BuildDailyOverviewRows();
         else BuildWeeklyOverviewRows();
         RebuildOverviewLegend();
@@ -189,7 +179,7 @@ public sealed partial class MainWindow : Window
             if (_isClosed) return;
             _stateIntervals = stateIntervals;
             _appDisplayMode = GetAppDisplayMode();
-            RebuildActiveIntervals();
+            RebuildDisplayData();
 
             if (GetRangeLabel() == "24h")
             {
@@ -313,13 +303,8 @@ public sealed partial class MainWindow : Window
         AppLabelTextBlock.Text = label;
     }
 
-    private void RebuildActiveIntervals()
-    {
-        var rows = _appDisplayMode == AppDisplayMode.Services
-            ? BrowserServices.ProjectForeground(_stateIntervals) : _stateIntervals;
-        _activeIntervals = rows.Where(x => x.State == "Active")
-            .Select(x => new ActiveIntervalRow(x.ExeName, x.StateStartUtc, x.StateEndUtc)).ToArray();
-    }
+    private void RebuildDisplayData() =>
+        _displayData = TimelineDisplayData.Create(_stateIntervals, _appDisplayMode);
 
     private static UsageQueryWindow CreateLocalDay24hWindow()
     {
@@ -353,7 +338,7 @@ public sealed partial class MainWindow : Window
     private void BuildDailyOverviewRows()
     {
         IReadOnlyList<StateStackRowLayout> rows = _layoutBuilder.BuildDailyStateStackRowsFromIntervals(
-            _activeIntervals,
+            _displayData.ActiveIntervals,
             _currentWindow,
             DailyTrackWidth);
 
@@ -363,7 +348,7 @@ public sealed partial class MainWindow : Window
     private void BuildWeeklyOverviewRows()
     {
         IReadOnlyList<StateStackRowLayout> rows = _layoutBuilder.BuildWeeklyStateStackRowsFromIntervals(
-            _activeIntervals,
+            _displayData.ActiveIntervals,
             _currentWindow,
             DailyTrackWidth);
 
@@ -375,32 +360,8 @@ public sealed partial class MainWindow : Window
         _overviewDailyRows.Clear();
         foreach (StateStackRowLayout row in rows)
         {
-            _overviewDailyRows.Add(new StateStackRowViewModel(
-                row.Label == "Active" ? "最前面" : row.Label,
-                row.TotalLabel,
-                row.Columns.Select(column =>
-                    new StackedColumnViewModel(
-                        column.Width,
-                        column.IsNoData,
-                        ToStackedEntries(column)))
-                    .ToList()));
+            _overviewDailyRows.Add(TimelineViewModelFactory.FromOverview(row));
         }
-    }
-
-    private static IReadOnlyList<StackedEntryViewModel> ToStackedEntries(StackedColumnLayout column)
-    {
-        if (column.Entries.Count == 0)
-        {
-            return [];
-        }
-
-        double entryHeight = 46.0 / column.Entries.Count;
-        return column.Entries.Select(entry =>
-            new StackedEntryViewModel(
-                entryHeight,
-                CreateBrush(entry.ColorHex),
-                entry.Tooltip))
-            .ToList();
     }
 
     private void RebuildAppNames()
@@ -411,7 +372,7 @@ public sealed partial class MainWindow : Window
         try
         {
             string? current = (AppComboBox.SelectedItem as AppChoice)?.ExeName;
-            IReadOnlyList<string> appNames = _layoutBuilder.BuildAppNames(GetAppDisplayIntervals());
+            IReadOnlyList<string> appNames = _layoutBuilder.BuildAppNames(_displayData.AppIntervals);
 
             _appNames.Clear();
             foreach (string app in appNames)
@@ -442,12 +403,11 @@ public sealed partial class MainWindow : Window
     private void RebuildOverviewLegend()
     {
         _overviewLegendItems.Clear();
-        IReadOnlyList<LegendItemLayout> legendItems = _layoutBuilder.BuildOverviewLegend(_activeIntervals);
+        IReadOnlyList<LegendItemLayout> legendItems = _layoutBuilder.BuildOverviewLegend(_displayData.ActiveIntervals);
         foreach (LegendItemLayout item in legendItems)
         {
-            _overviewLegendItems.Add(new LegendItemViewModel(
-                CreateBrush(item.ColorHex),
-                item.Label == TimelineLayoutBuilder.OtherLabel ? "その他" : AppChoice.FormatDisplayName(item.Label)));
+            _overviewLegendItems.Add(TimelineViewModelFactory.FromLegend(item with
+            { Label = item.Label == TimelineLayoutBuilder.OtherLabel ? "その他" : AppChoice.FormatDisplayName(item.Label) }));
         }
     }
 
@@ -456,7 +416,7 @@ public sealed partial class MainWindow : Window
         _appLegendItems.Clear();
         if (_appDisplayMode == AppDisplayMode.Services)
         {
-            _appLegendItems.Add(new LegendItemViewModel(CreateBrush("BrushTextSecondary"), "最前面の時間"));
+            _appLegendItems.Add(TimelineViewModelFactory.FromLegend(new("最前面の時間", "BrushTextSecondary")));
             return;
         }
         IReadOnlyList<LegendItemLayout> legendItems =
@@ -466,9 +426,7 @@ public sealed partial class MainWindow : Window
 
         foreach (LegendItemLayout item in legendItems)
         {
-            _appLegendItems.Add(new LegendItemViewModel(
-                CreateBrush(item.ColorHex),
-                item.Label));
+            _appLegendItems.Add(TimelineViewModelFactory.FromLegend(item));
         }
     }
 
@@ -476,7 +434,7 @@ public sealed partial class MainWindow : Window
     private void BuildAppDailyRows()
     {
         _appDailyLanes.Clear();
-        IReadOnlyList<AppStateIntervalRow> intervals = GetAppDisplayIntervals();
+        IReadOnlyList<AppStateIntervalRow> intervals = _displayData.AppIntervals;
         IReadOnlyList<StateLaneLayout> lanes = _layoutBuilder.BuildDailyAppRowsFromIntervals(
             intervals,
             _currentWindow,
@@ -484,10 +442,7 @@ public sealed partial class MainWindow : Window
 
         foreach (StateLaneLayout lane in lanes)
         {
-            _appDailyLanes.Add(new StateLaneViewModel(
-                AppChoice.FormatDisplayName(lane.Label),
-                lane.TotalLabel,
-                lane.Segments.Select(ToAbsoluteSegmentViewModel).ToList()));
+            _appDailyLanes.Add(TimelineViewModelFactory.FromApp(lane));
         }
     }
 
@@ -501,7 +456,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        IReadOnlyList<AppStateIntervalRow> intervals = GetAppDisplayIntervals();
+        IReadOnlyList<AppStateIntervalRow> intervals = _displayData.AppIntervals;
         IReadOnlyList<TimelineRowLayout> rows = _layoutBuilder.BuildAppTimelineRowsFromIntervals(
             intervals,
             _currentWindow,
@@ -510,54 +465,13 @@ public sealed partial class MainWindow : Window
 
         foreach (TimelineRowLayout row in rows)
         {
-            _appDailyLanes.Add(new StateLaneViewModel(
-                row.BucketLabel,
-                row.TotalLabel,
-                row.Segments.Select(ToAbsoluteSegmentViewModel).ToList()));
-        }
-    }
-
-    private static AbsoluteSegmentViewModel ToAbsoluteSegmentViewModel(SegmentLayout segment)
-    {
-        Brush fill = segment.IsNoData ? TransparentBrush : CreateBrush(segment.ColorHex);
-        return new AbsoluteSegmentViewModel(segment.Width, fill, segment.Tooltip);
-    }
-
-    private static SolidColorBrush CreateBrush(string hexOrKey)
-    {
-        if (Application.Current.Resources.TryGetValue(hexOrKey, out object resource))
-        {
-            if (resource is SolidColorBrush brush)
-            {
-                return brush;
-            }
-            if (resource is Windows.UI.Color color)
-            {
-                return new SolidColorBrush(color);
-            }
-        }
-
-        if (hexOrKey.Length != 7 || !hexOrKey.StartsWith("#", StringComparison.Ordinal))
-        {
-            return new SolidColorBrush(Colors.Gray);
-        }
-
-        try
-        {
-            byte r = Convert.ToByte(hexOrKey.Substring(1, 2), 16);
-            byte g = Convert.ToByte(hexOrKey.Substring(3, 2), 16);
-            byte b = Convert.ToByte(hexOrKey.Substring(5, 2), 16);
-            return new SolidColorBrush(Windows.UI.Color.FromArgb(255, r, g, b));
-        }
-        catch
-        {
-            return new SolidColorBrush(Colors.Gray);
+            _appDailyLanes.Add(TimelineViewModelFactory.FromDay(row));
         }
     }
 
     private void ClearRows()
     {
-        _activeIntervals = [];
+        _displayData = TimelineDisplayData.Create([], _appDisplayMode);
         _stateIntervals = [];
         _overviewDailyRows.Clear();
         _appDailyLanes.Clear();
@@ -574,28 +488,6 @@ public sealed partial class MainWindow : Window
         AppDisplayModeComboBox.IsEnabled = !busy;
         AppComboBox.IsEnabled = !busy;
         StatusTextBlock.Text = status;
-    }
-
-    private IReadOnlyList<AppStateIntervalRow> GetAppDisplayIntervals()
-    {
-        if (_appDisplayMode == AppDisplayMode.Services)
-            return BrowserServices.ProjectForeground(_stateIntervals);
-        if (_appDisplayMode == AppDisplayMode.StateDetails)
-        {
-            return _stateIntervals;
-        }
-
-        var runningIntervals = new List<AppStateIntervalRow>(_stateIntervals.Count);
-        foreach (AppStateIntervalRow interval in _stateIntervals)
-        {
-            runningIntervals.Add(new AppStateIntervalRow(
-                interval.ExeName,
-                "Running",
-                interval.StateStartUtc,
-                interval.StateEndUtc));
-        }
-
-        return runningIntervals;
     }
 
     private void RebuildAppRowsByCurrentMode()
