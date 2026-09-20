@@ -167,6 +167,14 @@ Desktopの実DB（約41.2 MiB）をReadOnlyで参照。2026-09-10〜09-16の7日
 
 ## その他の仕様の根拠
 
+### ブラウザサービス検証版（2026-09-20 / 0.3.0-preview.1）
+
+- Collectorテスト45件、Viewer/Sharedテスト42件、Node組み込みテスト25件成功。新しいNuGet/npm依存は追加していない。
+- `scripts/Test-BrowserHost.ps1` で実ホストexeの双方向フレーム中継・Collector切断後の終了と、4097バイトの不正フレーム拒否を確認。ブラウザ・DB・レジストリを使わず、FirstPipeInstance付きテストパイプで実Collectorへの誤接続を拒否する。
+- ホスト登録スクリプトは `-WhatIf` のみ実行。ブラウザ拡張、HKCU登録、Desktop差し替えは行っていない。稼働中のCollectorと実データ、公開済みv0.2.0を変更しない。
+- Viewerは実画面を開かず、XAML契約とサービス集計・ラベルのテストで検証。実ブラウザの複数ウィンドウ／プロフィール、ロック・復帰、拡張の導入、画面確認、長期負荷は未検証。サービス時間は通信遅延とスナップショット合流の影響を受け、ミリ秒精度を保証しない。
+- 詳細と手動受け入れ項目は [browser-services.md](browser-services.md)。新しい `services` 合成データは既存のDEMO専用DB機構を使い、実DBには投入しない。
+
 - [Windows console HandlerRoutine](https://learn.microsoft.com/en-us/windows/console/handlerroutine)
 - [SetConsoleCtrlHandlerのログオフ/シャットダウン制約](https://learn.microsoft.com/en-us/windows/console/setconsolectrlhandler)
 - [GetUserObjectInformation / UOI_IO](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getuserobjectinformationw)

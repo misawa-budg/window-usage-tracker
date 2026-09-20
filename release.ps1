@@ -142,7 +142,7 @@ function Copy-PackageDocumentation {
     }
     $docsDir = Join-Path $DestinationDir "docs"
     New-Item -Path $docsDir -ItemType Directory -Force | Out-Null
-    foreach ($file in @("architecture.md", "verification.md", "interview-notes.md")) {
+    foreach ($file in @("architecture.md", "verification.md", "interview-notes.md", "browser-services.md")) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot "docs/$file") -Destination $docsDir
     }
 }
@@ -229,6 +229,18 @@ function New-PortableBundle {
     New-Item -Path $bundleDir -ItemType Directory -Force | Out-Null
     Copy-DirectoryContents -SourceDir $collectorPackageDir -DestinationDir (Join-Path $bundleDir "collector")
     Copy-DirectoryContents -SourceDir $viewerPackageDir -DestinationDir (Join-Path $bundleDir "viewer")
+    $hostProject = Join-Path $PSScriptRoot "WinTracker.BrowserHost/WinTracker.BrowserHost.csproj"
+    $hostDir = Join-Path $bundleDir "browser-host"
+    Invoke-DotNetPublish -ProjectPath $hostProject -PublishDir $hostDir -SelfContained ($ModeSuffix -eq "sc")
+    Copy-DependencyNotices -ProjectPath $hostProject -PackageDir $hostDir -ApplicationName "WinTracker.BrowserHost"
+    $extensionDir = Join-Path $bundleDir "browser-extension"
+    New-Item -Path $extensionDir -ItemType Directory | Out-Null
+    foreach ($file in @("manifest.json", "background.js", "services.js")) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot "browser-extension/$file") -Destination $extensionDir
+    }
+    $scriptsDir = Join-Path $bundleDir "scripts"
+    New-Item -Path $scriptsDir -ItemType Directory | Out-Null
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot "scripts/Register-BrowserHost.ps1") -Destination $scriptsDir
     New-Item -Path (Join-Path $bundleDir "data") -ItemType Directory -Force | Out-Null
 
     $settingsSource = Join-Path $collectorPackageDir "collector.settings.json"
@@ -267,7 +279,7 @@ function New-PortableBundle {
         "setlocal"
         "set ""WINTRACKER_HOME=%~dp0"""
         "cd /d ""%~dp0"""
-        ".\collector\WinTracker.Collector.exe seed 1week mixed --demo --replace"
+        ".\collector\WinTracker.Collector.exe seed 1week services --demo --replace"
         "if errorlevel 1 exit /b %errorlevel%"
         "start """" .\viewer\WinTracker.Viewer.exe --demo"
     )

@@ -15,6 +15,9 @@ foreach ($mode in @("fd", "sc")) {
             $required = @("README.md", "LICENSE", "docs/verification.md")
             if ($kind -eq "window-usage-tracker-portable") {
                 $required += @("collector/WinTracker.Collector.exe", "viewer/WinTracker.Viewer.exe",
+                    "browser-host/WinTracker.BrowserHost.exe", "browser-extension/manifest.json",
+                    "browser-extension/background.js", "browser-extension/services.js",
+                    "scripts/Register-BrowserHost.ps1", "docs/browser-services.md",
                     "collector.settings.json", "Run-Collector.cmd", "Run-Viewer.cmd", "Run-Demo.cmd", "Stop-Collector.cmd")
                 $viewerPrefix = "viewer/"
             }

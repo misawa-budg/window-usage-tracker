@@ -11,6 +11,7 @@ docs/*
 !docs/requirements_viewer.md
 !docs/verification.md
 !docs/interview-notes.md
+!docs/browser-services.md
 
 # Visual Studio
 .vs/
